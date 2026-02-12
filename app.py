@@ -743,7 +743,7 @@ try:
             r2_p = r2_score(y_p, y_pred_h)
 
             st.subheader(f"Métricas de Confianza: {productos_dict[id_sel]}")
-            m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+            m1, m2, m3, m4, m5, m6, m7 = st.columns(6)
 
            # JOAN
             m1.metric(
@@ -786,13 +786,6 @@ try:
             # Evitamos división por cero con un pequeño epsilon
             mape = np.mean(np.abs((y_p - y_pred_h) / y_p)) * 100
 
-            # Sustituimos o añadimos en m3 el Error Porcentual
-            m6.metric(
-                label="MAPE (Error %)",
-                value=f"{mape:.1f}%",
-                help="Es el error promedio en porcentaje. Un 10% significa que la IA acierta el 90% de la cantidad real."
-            )
-
             # 1. Calculamos la suma de los errores absolutos
             suma_error_absoluto = np.abs(y_p - y_pred_h).sum()
 
@@ -804,7 +797,7 @@ try:
                     suma_ventas_reales) if suma_ventas_reales != 0 else 0
 
             # Ahora lo añadimos a una de tus métricas (por ejemplo, en m3 junto al MAE o sustituyéndolo)
-            m7.metric(
+            m6.metric(
                 label="WAPE (Error Global)",
                 value=f"{wape:.1%}",
                 help="Error ponderado por volumen. Es la métrica estándar en logística: mide cuánto fallamos sobre el total de kilos/unidades vendidos."
