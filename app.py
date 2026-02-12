@@ -743,7 +743,7 @@ try:
             r2_p = r2_score(y_p, y_pred_h)
 
             st.subheader(f"Métricas de Confianza: {productos_dict[id_sel]}")
-            m1, m2, m3, m4, m5, m6, m7 = st.columns(6)
+            m1, m2, m3, m4, m5, m6 = st.columns(6)
 
            # JOAN
             m1.metric(
@@ -784,7 +784,6 @@ try:
             )
             # Cálculo del MAPE (Error Porcentual)
             # Evitamos división por cero con un pequeño epsilon
-            mape = np.mean(np.abs((y_p - y_pred_h) / y_p)) * 100
 
             # 1. Calculamos la suma de los errores absolutos
             suma_error_absoluto = np.abs(y_p - y_pred_h).sum()
