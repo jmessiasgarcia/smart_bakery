@@ -1019,9 +1019,7 @@ if id_limpio in ventas_reales_enero:
             # Mostramos el porcentaje en el delta
             st.metric(
                 "Brecha de Demanda",
-                f"{diferencia:.0f} unidades",
-                delta=f"{porcentaje_brecha:.1f}% vs Real",
-                delta_color="inverse" if diferencia > 0 else "normal"
+                f"{diferencia:.0f} unidades"
             )
 
         # Tabla resumen con la columna de porcentaje
