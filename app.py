@@ -858,7 +858,7 @@ try:
             fig.add_trace(go.Scatter(
                 x=df_proj['Fecha'],
                 y=df_proj['Cantidad_Unidades'],
-                name='Proyección RF',
+                name='Predicción',
                 line=dict(color='#2EC18E', dash='dash', width=3),
                 # :.0f quita decimales y <extra></extra> quita el trace lateral
                 hovertemplate="<b>%{fullData.name}</b><br>Fecha: %{x}<br>Unidades: %{y:.0f}<extra></extra>"
@@ -876,12 +876,26 @@ try:
                 hoverinfo='skip'
             ))
 
+           # ... (Tus trazas anteriores se mantienen igual) ...
+
             fig.update_layout(
                 title=f"Tendencia Predictiva: {productos_dict[id_sel]}",
                 template="plotly_dark",
                 height=550,
-                # Forzamos a que el eje Y no muestre decimales (vírgulas)
-                yaxis=dict(tickformat=".0f")
+                yaxis=dict(tickformat=".0f"),
+
+                # --- AQUÍ LA CONFIGURACIÓN DE LA LEYENDA DENTRO ---
+                showlegend=True,
+                legend=dict(
+                    yanchor="top",
+                    y=0.99,      # 1 es el borde superior
+                    xanchor="left",
+                    x=0.01,      # 0 es el borde izquierdo
+                    # Fondo semitransparente para que no tape el grid
+                    bgcolor="rgba(0,0,0,0.5)"
+                ),
+                # Reducimos márgenes laterales para agrandar más el gráfico
+                margin=dict(l=0, r=10, t=50, b=0)
             )
 
             st.plotly_chart(fig, use_container_width=True)
