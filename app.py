@@ -878,26 +878,30 @@ try:
 
            # ... (Tus trazas anteriores se mantienen igual) ...
 
+          # ... (Tus trazas anteriores: Histórico, Predicción y Sombreado se mantienen igual) ...
+
             fig.update_layout(
                 title=f"Tendencia Predictiva: {productos_dict[id_sel]}",
                 template="plotly_dark",
                 height=550,
                 yaxis=dict(tickformat=".0f"),
 
-                # --- AQUÍ LA CONFIGURACIÓN DE LA LEYENDA DENTRO ---
+                # --- AQUÍ LA SOLUCIÓN PARA LA LEYENDA DENTRO ---
                 showlegend=True,
                 legend=dict(
-                    yanchor="top",
-                    y=0.99,      # 1 es el borde superior
-                    xanchor="left",
-                    x=0.01,      # 0 es el borde izquierdo
-                    # Fondo semitransparente para que no tape el grid
-                    bgcolor="rgba(0,0,0,0.5)"
+                    orientation="h",     # La ponemos horizontal para que ocupe menos
+                    yanchor="bottom",
+                    y=1.02,              # La sitúa justo encima de la línea del gráfico
+                    xanchor="right",
+                    x=1,                 # La alinea a la derecha
+                    bgcolor="rgba(0,0,0,0)"  # Fondo totalmente transparente
                 ),
-                # Reducimos márgenes laterales para agrandar más el gráfico
-                margin=dict(l=0, r=10, t=50, b=0)
+
+                # --- FORZAMOS AL GRÁFICO A OCUPAR TODO EL ANCHO ---
+                margin=dict(l=10, r=10, t=80, b=10)
             )
 
+            # Usamos st.plotly_chart asegurando el ancho completo
             st.plotly_chart(fig, use_container_width=True)
 
             with st.expander("Ver desglose de previsiones"):
