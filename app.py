@@ -851,8 +851,14 @@ try:
 
             # Línea Proyección
             fig.add_trace(go.Scatter(
-                x=df_proj['Fecha'], y=df_proj['Cantidad_Unidades'],
-                name='Proyección RF', line=dict(color='#2EC18E', dash='dash', width=3)
+                x=df_proj['Fecha'],
+                y=df_proj['Cantidad_Unidades'],
+                name='Proyección RF',
+                line=dict(color='#2EC18E', dash='dash', width=3),
+                # Aquí la solución:
+                hovertemplate="<b>%{fullData.name}</b><br>" +
+                "Fecha: %{x}<br>" +
+                "Unidades: %{y:.0f}<extra></extra>"
             ))
 
             # Sombreado de confianza
