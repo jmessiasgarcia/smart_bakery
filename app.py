@@ -844,21 +844,25 @@ try:
                               fillcolor=color_faja, layer="below", line_width=0)
 
             # Línea Histórica
+            # Línea Histórica (Ventas reales)
             fig.add_trace(go.Scatter(
-                x=df_prod_ml['Fecha'], y=df_prod_ml['Cantidad_Unidades'],
-                name='Histórico', line=dict(color="#10BCF6", width=3)
+                x=df_prod_ml['Fecha'],
+                y=df_prod_ml['Cantidad_Unidades'],
+                name='Histórico',
+                line=dict(color="#10BCF6", width=3),
+                # Añadimos esto para limpiar el tooltip y quitar decimales
+                hovertemplate="<b>%{fullData.name}</b><br>Fecha: %{x}<br>Unidades: %{y:.0f}<extra></extra>"
             ))
 
             # Línea Proyección
+         # Línea Proyección
             fig.add_trace(go.Scatter(
                 x=df_proj['Fecha'],
                 y=df_proj['Cantidad_Unidades'],
                 name='Proyección RF',
                 line=dict(color='#2EC18E', dash='dash', width=3),
-                # Aquí la solución:
-                hovertemplate="<b>%{fullData.name}</b><br>" +
-                "Fecha: %{x}<br>" +
-                "Unidades: %{y:.0f}<extra></extra>"
+                # El :.0f quita los decimales. El <extra></extra> quita el "trace"
+                hovertemplate="<b>%{fullData.name}</b><br>Fecha: %{x}<br>Unidades: %{y:.0f}<extra></extra>"
             ))
 
             # Sombreado de confianza
