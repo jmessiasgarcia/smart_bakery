@@ -95,7 +95,7 @@ OBJETIVO_CLIENTES = 500    # nao utilizo
 
 
 # --- BLOQUE 1: KPIs CON COMPARATIVA ---
-st.markdown("######    Indicadores Clave de Rendimiento")
+
 c1, c2, c4 = st.columns(3)
 
 # 1. Ventas Totales y % sobre objetivo
