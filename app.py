@@ -792,7 +792,7 @@ try:
 
             m3.metric(
                 label="MAE (Error)",
-                value=f"{mae_mostrar:.0f} ud.",
+                value=f"{mae_mostrar:.0f} unidades",
                 help="Error medio absoluto por mes."
             )
 
