@@ -835,6 +835,7 @@ try:
             df_proj = pd.DataFrame(proyecciones)
 
             # 6. GRÁFICO PLOTLY
+           # 6. GRÁFICO PLOTLY
             fig = go.Figure()
 
             # Shadowing por años
@@ -843,44 +844,53 @@ try:
                 fig.add_vrect(x0=f"{ano}-01-01", x1=f"{ano}-12-31",
                               fillcolor=color_faja, layer="below", line_width=0)
 
-            # Línea Histórica
             # Línea Histórica (Ventas reales)
             fig.add_trace(go.Scatter(
                 x=df_prod_ml['Fecha'],
                 y=df_prod_ml['Cantidad_Unidades'],
                 name='Histórico',
                 line=dict(color="#10BCF6", width=3),
-                # Añadimos esto para limpiar el tooltip y quitar decimales
+                # :.0f quita decimales y <extra></extra> quita el trace lateral
                 hovertemplate="<b>%{fullData.name}</b><br>Fecha: %{x}<br>Unidades: %{y:.0f}<extra></extra>"
             ))
 
             # Línea Proyección
-         # Línea Proyección
             fig.add_trace(go.Scatter(
                 x=df_proj['Fecha'],
                 y=df_proj['Cantidad_Unidades'],
                 name='Proyección RF',
                 line=dict(color='#2EC18E', dash='dash', width=3),
-                # El :.0f quita los decimales. El <extra></extra> quita el "trace"
+                # :.0f quita decimales y <extra></extra> quita el trace lateral
                 hovertemplate="<b>%{fullData.name}</b><br>Fecha: %{x}<br>Unidades: %{y:.0f}<extra></extra>"
             ))
 
-            # Sombreado de confianza
+            # Sombreado de confianza (AQUÍ ESTABA EL TRACE 2)
             fig.add_trace(go.Scatter(
                 x=pd.concat([df_proj['Fecha'], df_proj['Fecha'][::-1]]),
                 y=pd.concat([df_proj['Upper'], df_proj['Lower'][::-1]]),
-                fill='toself', fillcolor='rgba(46,193,142,0.08)',
-                line=dict(color='rgba(255,255,255,0)'), showlegend=False
+                fill='toself',
+                fillcolor='rgba(46,193,142,0.08)',
+                line=dict(color='rgba(255,255,255,0)'),
+                showlegend=False,
+                # SOLUCIÓN: hoverinfo='skip' hace que este sombreado sea invisible al ratón
+                hoverinfo='skip'
             ))
 
             fig.update_layout(
-                title=f"Tendencia Predictiva: {productos_dict[id_sel]}", template="plotly_dark", height=550)
+                title=f"Tendencia Predictiva: {productos_dict[id_sel]}",
+                template="plotly_dark",
+                height=550,
+                # Forzamos a que el eje Y no muestre decimales (vírgulas)
+                yaxis=dict(tickformat=".0f")
+            )
+
             st.plotly_chart(fig, use_container_width=True)
 
             with st.expander("Ver desglose de previsiones"):
                 df_futuro_solo = df_proj.iloc[1:].copy()
                 df_futuro_solo['Mes'] = df_futuro_solo['Fecha'].dt.strftime(
                     '%B %Y')
+                # Aseguramos que en la tabla también sean enteros
                 df_futuro_solo['Previsto (Media)'] = df_futuro_solo['Cantidad_Unidades'].round(
                     0).astype(int)
                 st.dataframe(df_futuro_solo[[
