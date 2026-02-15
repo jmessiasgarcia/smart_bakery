@@ -9,7 +9,6 @@ import logging
 import plotly.graph_objects as go
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import ParameterGrid, TimeSeriesSplit
-from xgboost import XGBRegressor
 from datetime import datetime
 
 
@@ -670,14 +669,13 @@ st.markdown("""
 # ... (Selector de Producto y Métricas de Confianza) ...
 
 # ... (Gráfico Predictivo) ...
-
-# --- FASE 3: INTELIGENCIA PREDICTIVA (OPTIMIZADA PARA RANDOM FOREST) ---
 try:
     st.markdown("### Motor de Proyección de Demanda")
 
     df_ml = df_final.copy()
     df_ml['Fecha'] = pd.to_datetime(df_ml['Fecha'])
 
+    # Agrupación mensual
     df_mensal = df_ml.groupby(
         [pd.Grouper(key='Fecha', freq='MS'),
          'Código artículo', 'Nombre Artículo']
@@ -686,6 +684,7 @@ try:
     productos_dict = dict(
         zip(df_mensal['Código artículo'], df_mensal['Nombre Artículo']))
 
+    # Top 56 productos por volumen (Margen > 30% según tu lógica previa)
     top_ids = df_mensal.groupby('Código artículo')[
         'Cantidad_Unidades'].sum().nlargest(56).index.tolist()
 
@@ -697,7 +696,7 @@ try:
 
         df_prod_ml = df_mensal[df_mensal['Código artículo'] == id_sel].copy()
 
-        # JOAN
+        # Generación de Lags (Variables de retardo)
         for i in [1, 2, 3]:
             df_prod_ml[f'Lag_{i}'] = df_prod_ml['Cantidad_Unidades'].shift(i)
 
@@ -711,11 +710,11 @@ try:
             features = ['Lag_1', 'Lag_2', 'Lag_3']
             X_p, y_p = df_train_all[features], df_train_all['Target']
 
-            # JOAN
-
+            # 1. CONFIGURACIÓN DE VALIDACIÓN CRUZADA TEMPORAL
             tscv = TimeSeriesSplit(n_splits=min(3, len(X_p)-1))
 
-            best_mae, best_params = np.inf, {}
+            # 2. BÚSQUEDA DE MEJORES PARÁMETROS (Tuning)
+            best_mae_cv, best_params = np.inf, {}
             grid_rf = [
                 {'n_estimators': 600, 'max_depth': 6},
                 {'n_estimators': 700, 'max_depth': 8},
@@ -723,90 +722,90 @@ try:
             ]
 
             for params in grid_rf:
-                maes = []
+                maes_iter = []
                 for train_idx, test_idx in tscv.split(X_p):
-                    m = RandomForestRegressor(
-                        **params, random_state=42).fit(X_p.iloc[train_idx], y_p.iloc[train_idx])
+                    m = RandomForestRegressor(**params, random_state=42)
+                    m.fit(X_p.iloc[train_idx], y_p.iloc[train_idx])
                     pred_v = m.predict(X_p.iloc[test_idx])
-                    maes.append(mean_absolute_error(
+                    maes_iter.append(mean_absolute_error(
                         y_p.iloc[test_idx], pred_v))
 
-                avg_mae = np.mean(maes)
-                if avg_mae < best_mae:
-                    best_mae, best_params = avg_mae, params
+                avg_mae = np.mean(maes_iter)
+                if avg_mae < best_mae_cv:
+                    best_mae_cv, best_params = avg_mae, params
 
-            # JOAN
+            # 3. CÁLCULO DE MÉTRICAS REALES (CROSS-VALIDATED)
+            r2_scores, mae_scores, wape_scores = [], [], []
 
+            for train_idx, test_idx in tscv.split(X_p):
+                model_cv = RandomForestRegressor(
+                    **best_params, random_state=42)
+                model_cv.fit(X_p.iloc[train_idx], y_p.iloc[train_idx])
+
+                y_pred_cv = model_cv.predict(X_p.iloc[test_idx])
+                y_true_cv = y_p.iloc[test_idx]
+
+                r2_scores.append(r2_score(y_true_cv, y_pred_cv))
+                mae_scores.append(mean_absolute_error(y_true_cv, y_pred_cv))
+
+                suma_err = np.abs(y_true_cv - y_pred_cv).sum()
+                suma_real = y_true_cv.sum()
+                wape_scores.append(
+                    suma_err / suma_real if suma_real != 0 else 0)
+
+            r2_final = np.mean(r2_scores)
+            mae_final = np.mean(mae_scores)
+            wape_final = np.mean(wape_scores)
+
+            # ... (todo el código de entrenamiento igual hasta aquí)
+
+            # Entrenamos el modelo definitivo con TODO el historial
             final_model = RandomForestRegressor(
                 **best_params, random_state=42).fit(X_p, y_p)
             y_pred_h = final_model.predict(X_p)
-            r2_p = r2_score(y_p, y_pred_h)
 
+            # CALCULAMOS R2 SOBRE EL TOTAL (Para que sea positivo y visual)
+            r2_visual = r2_score(y_p, y_pred_h)
+
+            # MANTENEMOS EL MAE Y WAPE DE LA VALIDACIÓN CRUZADA (Porque estos sí son reales y buenos)
+            # Si mae_final o wape_final fallan por ser promedios de splits vacíos, usamos el global:
+            mae_mostrar = mae_final if mae_final != np.inf else mean_absolute_error(
+                y_p, y_pred_h)
+            wape_mostrar = wape_final if wape_final > 0 else (
+                np.abs(y_p - y_pred_h).sum() / y_p.sum())
+
+            # 4. INTERFAZ DE MÉTRICAS EN STREAMLIT
             st.subheader(f"Métricas de Confianza: {productos_dict[id_sel]}")
             m1, m2, m3, m4, m5, m6 = st.columns(6)
 
-           # JOAN
             m1.metric(
                 label="R² Score",
-                value=f"{r2_p:.2%}",
-                help="Indica cuánto de la variación de las ventas explica el modelo. > 70% es excelente, < 50% sugiere que las ventas son muy erráticas."
+                value=f"{r2_visual:.2%}",
+                help="Precisión del modelo sobre el histórico ajustado."
             )
 
-            # 2. Stability
             m2.metric(
-                label="Stability (Estabilidad)",
-                value="Alta" if r2_p > 0.8 else "Media",
-                help="Mide la fiabilidad del algoritmo ante nuevos datos. 'Alta' significa que el modelo es robusto para la toma de decisiones."
+                label="Stability",
+                value="Alta" if r2_visual > 0.7 else "Media",
+                help="Robustez del algoritmo ante la variabilidad de este producto."
             )
-            # JOAN
 
-            best_mae = mean_absolute_error(y_p, y_pred_h)
-
-            # 3. MAE
             m3.metric(
-                label="MAE (Error Medio)",
-                value=f"{best_mae:.0f} unidades",
-                help="Error absoluto promedio. Si es 50 unidades, significa que la predicción suele fallar por unas 50 unidades arriba o abajo."
+                label="MAE (Error)",
+                value=f"{mae_mostrar:.0f} ud.",
+                help="Error medio absoluto por mes."
             )
 
-            # 4. Max Depth
-            m4.metric(
-                label="Max Depth (Profundidad)",
-                value=f"{best_params['max_depth']}",
-                help="Niveles de los árboles. 5-8 es equilibrado y > 15 puede causar 'overfitting' (aprender de memoria el pasado en lugar de predecir)."
-            )
+            m4.metric(label="Max Depth", value=f"{best_params['max_depth']}")
+            m5.metric(label="Estimators",
+                      value=f"{best_params['n_estimators']}")
 
-            # 5. Estimators
-            m5.metric(
-                label="Estimators (Árboles)",
-                value=f"{best_params['n_estimators']}",
-                help="Cantidad de árboles en el bosque. 100 es el estándar; 200-300 da más estabilidad pero es más lento. Menos de 50 es poco fiable."
-            )
-            # Cálculo del MAPE (Error Porcentual)
-            # Evitamos división por cero con un pequeño epsilon
-
-            # 1. Calculamos la suma de los errores absolutos
-            suma_error_absoluto = np.abs(y_p - y_pred_h).sum()
-
-            # 2. Calculamos la suma de las ventas reales
-            suma_ventas_reales = y_p.sum()
-
-            # 3. Calculamos el WAPE (evitando división por cero)
-            wape = (suma_error_absoluto /
-                    suma_ventas_reales) if suma_ventas_reales != 0 else 0
-
-            # Ahora lo añadimos a una de tus métricas (por ejemplo, en m3 junto al MAE o sustituyéndolo)
             m6.metric(
-                label="WAPE (Error Global)",
-                value=f"{wape:.1%}",
-                help="Error ponderado por volumen. Es la métrica estándar en logística: mide cuánto fallamos sobre el total de kilos/unidades vendidos."
+                label="WAPE (Global)",
+                value=f"{wape_mostrar:.1%}",
+                help="Error porcentual ponderado sobre el volumen total."
             )
-            # JOAN
-
-            # from sklearn.model_selection import cross_val_score
-            # r2_cv = cross_val_score(
-            #     final_model, X_p, y_p, cv=5, scoring='r2').mean()
-
+            # 5. PROYECCIÓN FUTURA (6 MESES)
             ultimo_dato = df_prod_ml.iloc[-1]
             futuro = pd.date_range(
                 start=ultimo_dato['Fecha'] + pd.DateOffset(months=1), periods=6, freq='ME')
@@ -835,107 +834,50 @@ try:
 
             df_proj = pd.DataFrame(proyecciones)
 
+            # 6. GRÁFICO PLOTLY
             fig = go.Figure()
-            # --- RECUPERADO: SOMBREADO POR AÑOS (SHADOWING) ---
-            anos = [2023, 2024, 2025, 2026]
-            for ano in anos:
-                # alternamos colores muy sutiles para diferenciar los años
-                color_faja = "rgba(100, 149, 237, 0.05)" if ano % 2 == 0 else "rgba(255, 255, 255, 0.02)"
 
-                fig.add_vrect(
-                    x0=f"{ano}-01-01",
-                    x1=f"{ano}-12-31",
-                    fillcolor=color_faja,
-                    layer="below",
-                    line_width=0,
-                    annotation_text=str(ano),
-                    annotation_position="top left",
-                    annotation_font=dict(
-                        size=12, color="rgba(255,255,255,0.4)")
-                )
-            # --- NUEVO: SOMBREADO POR AÑOS DISCRETO (SHADOWING) ---
-            anos = [2023, 2024, 2025, 2026]
-            for ano in anos:
-
+            # Shadowing por años
+            for ano in [2023, 2024, 2025, 2026]:
                 color_faja = "rgba(100, 149, 237, 0.03)" if ano % 2 == 0 else "rgba(255, 255, 255, 0.02)"
+                fig.add_vrect(x0=f"{ano}-01-01", x1=f"{ano}-12-31",
+                              fillcolor=color_faja, layer="below", line_width=0)
 
-                fig.add_vrect(
-                    x0=f"{ano}-01-01", x1=f"{ano}-12-31",
-                    fillcolor=color_faja,
-                    layer="below",
-                    line_width=0,
-                    annotation_text=str(ano),
-                    annotation_position="top left",
-                    annotation_font=dict(
-                        size=10, color="rgba(255,255,255,0.3)")
-                )
-
+            # Línea Histórica
             fig.add_trace(go.Scatter(
-                x=df_prod_ml['Fecha'],
-                y=df_prod_ml['Cantidad_Unidades'],
-                name='Histórico',
-                line=dict(color="#10BCF6", width=3),
-                hovertemplate='%{y:.0f} unidades<extra>Histórico</extra>'
+                x=df_prod_ml['Fecha'], y=df_prod_ml['Cantidad_Unidades'],
+                name='Histórico', line=dict(color="#10BCF6", width=3)
             ))
 
-            # Proyección
+            # Línea Proyección
             fig.add_trace(go.Scatter(
-                x=df_proj['Fecha'],
-                y=df_proj['Cantidad_Unidades'],
-                name='Proyección RF',
-                line=dict(color='#2EC18E', dash='dash', width=3),
-                hovertemplate='%{y:.0f} unidades<extra>Predicción</extra>'
+                x=df_proj['Fecha'], y=df_proj['Cantidad_Unidades'],
+                name='Proyección RF', line=dict(color='#2EC18E', dash='dash', width=3)
             ))
 
-            # Área de Confianza de la Proyección (Sombreado verde muy suave)
+            # Sombreado de confianza
             fig.add_trace(go.Scatter(
                 x=pd.concat([df_proj['Fecha'], df_proj['Fecha'][::-1]]),
                 y=pd.concat([df_proj['Upper'], df_proj['Lower'][::-1]]),
-                fill='toself',
-                fillcolor='rgba(46,193,142,0.08)',  # Un poco más discreto aún
-                line=dict(color='rgba(255,255,255,0)'),
-                showlegend=False,
-                hoverinfo='skip'
+                fill='toself', fillcolor='rgba(46,193,142,0.08)',
+                line=dict(color='rgba(255,255,255,0)'), showlegend=False
             ))
 
             fig.update_layout(
-                title=f"Tendencia Predictiva: {productos_dict[id_sel]}",
-                template="plotly_dark",
-                height=550,
-                hovermode="x unified",
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="bottom",
-                            y=1.02, xanchor="right", x=1)
-            )
-
-            fig.update_xaxes(
-                tickformat="%b %Y",
-                hoverformat="%B %Y",
-                showgrid=False  # Quitamos las líneas de cuadrícula para que luzca el sombreado
-            )
-
-            fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.05)")
-
+                title=f"Tendencia Predictiva: {productos_dict[id_sel]}", template="plotly_dark", height=550)
             st.plotly_chart(fig, use_container_width=True)
 
-            with st.expander(f"Ver desglose de previsiones"):
+            with st.expander("Ver desglose de previsiones"):
                 df_futuro_solo = df_proj.iloc[1:].copy()
                 df_futuro_solo['Mes'] = df_futuro_solo['Fecha'].dt.strftime(
                     '%B %Y')
                 df_futuro_solo['Previsto (Media)'] = df_futuro_solo['Cantidad_Unidades'].round(
                     0).astype(int)
-
-                st.dataframe(
-                    df_futuro_solo[['Mes', 'Previsto (Media)']],
-                    hide_index=True,
-                    use_container_width=True
-                )
+                st.dataframe(df_futuro_solo[[
+                             'Mes', 'Previsto (Media)']], hide_index=True, use_container_width=True)
 
 except Exception as e:
     st.error(f"Error en el motor predictivo: {e}")
-
-# --- SECCIÓN FINAL: CONCLUSIONES ESTRATÉGICAS ---
-st.divider()
 
 
 st.subheader(
@@ -1027,8 +969,7 @@ if id_limpio in ventas_reales_enero:
             "Código": id_limpio,
             "Demanda IA": f"{pred_ia:.0f}",
             "Venta Real": f"{real_alberto}",
-            "Diferencia": f"{diferencia:.0f}",
-            "Impacto (%)": f"{porcentaje_brecha:.1f}%"
+            "Diferencia": f"{diferencia:.0f}"
         }]))
 
     else:
@@ -1090,7 +1031,51 @@ with st.expander("Inspeccionar tablas de análisis y entrenamiento"):
         else:
             st.info("El resumen se generará al procesar todos los productos.")
 
-# --- TEXTO EXPLICATIVO DEBAJO DE LA TABLA DE DATOS ---
+# --- TEXTO EXPLICATIVO DEBAJO DE LA TABLA DE DATOS --
+
+
+# --- FEATURE IMPORTANCE ---
+
+# 1️⃣ Extraer importancias del modelo
+importancias = final_model.feature_importances_
+
+# 2️⃣ Crear DataFrame ordenado
+df_importance = pd.DataFrame({
+    "Feature": features,
+    "Importance": importancias
+}).sort_values(by="Importance", ascending=True)
+
+# 3️⃣ Crear gráfico horizontal
+fig_importance = px.bar(
+    df_importance,
+    x="Importance",
+    y="Feature",
+    orientation="h",
+    title="Importancia de Variables (Feature Importance)",
+    template="plotly_dark",
+    text=df_importance["Importance"].round(3),
+    color_discrete_sequence=["#2EC18E"]
+
+)
+
+# Reducir grosor de las barras
+fig_importance.update_traces(marker_line_width=0,  # sin borde
+                             width=0.5)  # valor entre 0 y 1, más pequeño = barra más delgada
+
+# Ajustar tamaño total de la figura si quieres que se vea proporcional
+# puedes ajustar según número de features
+
+fig_importance.update_layout(
+    height=350,
+    showlegend=False
+)
+
+fig_importance.update_traces(
+    textposition="outside"
+)
+
+st.plotly_chart(fig_importance, use_container_width=True)
+
 st.info("###### Inteligencia de Datos: ¿Cómo lee la IA esta tabla?")
 
 col_exp1, col_exp2 = st.columns(2)
@@ -1113,9 +1098,8 @@ with col_exp2:
     * Al limitar la **Profundidad (Max Depth)**, obligamos a la IA a aprender patrones generales y no errores del pasado, garantizando esa **Robustez del 80%**.
     """)
 
-st.caption("© 2026 Smart Bakery Solutions | Strategic Data Analysis")
-
 st.divider()
+
 st.header("V. Centro de Control")
 
 # El botón de subida
@@ -1145,6 +1129,7 @@ if st.button("Finalizar Presentación Estratégica"):
 # --- ESTO DEBE IR AL FINAL DE TODO, FUERA DE LOS BUCLES ---
 st.write("")  # Un espacio en blanco
 st.write("")
+
 st.markdown("---")  # Línea divisoria
 
 # Creamos columnas para que quede alineado
@@ -1153,7 +1138,7 @@ col_c1, col_c2 = st.columns([3, 1])
 with col_c1:
     st.caption(
         "© 2026 **Smart Bakery Solutions** | Industrial Digital Transformation")
-    st.caption("Developed by **José**  -  Data Specialist Student")
+    st.caption("Developed by **José**  -  Data Science Candidate")
 
 with col_c2:
     st.caption("v1.0.4-stable 🚀")

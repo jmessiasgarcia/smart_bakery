@@ -517,7 +517,67 @@ with col2:
     # Mostrar en Streamlit
     st.plotly_chart(fig_bar, width='stretch')
 
-# --- FASE 2: RENTABILIDAD ---
+# --- FASE 2: RENTABILIDAD --
+
+st.divider()
+st.header("Optimizador de Margen (Simulador Estratégico)")
+st.info("Utilice esta calculadora para ajustar precios o descuentos y ver el impacto inmediato en la rentabilidad.")
+
+# 1. Selección de Producto para el Simulador
+prod_sim = st.selectbox("Seleccione un producto para simular:",
+                        df_margen_raw['Nombre Artículo'].unique())
+datos_orig = df_margen_raw[df_margen_raw['Nombre Artículo']
+                           == prod_sim].iloc[0]
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("Margen Actual", f"{datos_orig['Margen Bruto Unitario']:.1%}")
+    coste_u = datos_orig['Coste Producción Unitario']
+    st.caption(f"Coste de producción: {coste_u:.3f}€")
+
+with col2:
+    # Palanca 1: El Multiplicador de Precio
+    nuevo_mult = st.slider("Ajustar Multiplicador (Precio)", 1.0, 15.0, float(
+        datos_orig['Multiplicador']), step=0.1)
+    nueva_venta_bruta = coste_u * nuevo_mult
+
+with col3:
+    # Palanca 2: El Descuento
+    nuevo_dto = st.slider("Ajustar Descuento (%)", 0, 100, int(
+        datos_orig['Descuento Porcentual'] * 100)) / 100
+    nueva_venta_neta = nueva_venta_bruta * (1 - nuevo_dto)
+
+# 2. Cálculos de la Simulación
+nuevo_margen_euro = nueva_venta_neta - coste_u
+nuevo_margen_porc = (nuevo_margen_euro /
+                     nueva_venta_neta) if nueva_venta_neta > 0 else 0
+
+# 3. Mostrar Resultado del Impacto
+st.subheader("Resultado de la Simulación")
+res1, res2, res3 = st.columns(3)
+
+# Color del indicador
+color_margin = "normal" if nuevo_margen_porc >= 0.3 else "inverse"
+
+res1.metric("PVP Final Sugerido", f"{nueva_venta_neta:.3f} €",
+            delta=f"{nueva_venta_neta - datos_orig['Venta Neta Unitario']:.3f} €")
+
+res2.metric("Nuevo Margen %", f"{nuevo_margen_porc:.1%}",
+            delta=f"{(nuevo_margen_porc - datos_orig['Margen Bruto Unitario']):.1%}",
+            delta_color=color_margin)
+
+res3.metric("Margen por Unidad (€)", f"{nuevo_margen_euro:.3f} €")
+
+# 4. Consejo Estratégico automático
+if nuevo_margen_porc < 0.3:
+    st.error(
+        f"⚠️ Atención: Con estos ajustes, el margen sigue por debajo del objetivo del 30%. Se recomienda subir el multiplicador a más de {(0.3 + (coste_u/(nueva_venta_bruta*(1-nuevo_dto)) if nueva_venta_bruta > 0 else 0)):.1f}")
+else:
+    st.success(
+        "Objetivo alcanzado: Este ajuste sitúa al producto en la zona de alta rentabilidad.")
+
+
 st.divider()
 # --- SECCIÓN 2: OPTIMIZACIÓN DEL MARGEN Y RENTABILIDAD ---
 st.header("II. Matriz de Decisión")
