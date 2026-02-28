@@ -976,7 +976,7 @@ st.header("VI. Smart Bakery App: Motor de Inteligencia Predictiva")
 
 st.markdown("""
     Para garantizar que el modelo de Machine Learning aporte el máximo valor operativo, he aplicado un **filtro de viabilidad**:
-    * **Selección Estratégica:** Solo se han analizado productos con un **Margen > 30%**.
+    * **Selección Estratégica:** Se han analizado productos con un **Margen > 30%**.
 
 """)
 
