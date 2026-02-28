@@ -757,9 +757,9 @@ else:
         f"No se han encontrado datos para el cliente {int(id_cliente_audit)}. Verifica si el código es correcto en la tabla superior.")
 
 # --- SECCIÓN 2: OPTIMIZACIÓN DEL MARGEN Y RENTABILIDAD ---
-st.header("IV. Matriz de Decisión")
+st.header("III. Matriz de Decisión")
 st.markdown("""
-    ###### Solo se han analizado productos con un **Margen > 30%**.
+    ###### Productos con un **Margen > 30%**.
 """)
 
 total_vta_f2 = df_final['Importe_Euros'].sum()
@@ -895,8 +895,7 @@ with st.expander("Listado Detallado"):
 st.divider()
 
 
-st.divider()
-st.header("III. Optimizador de Margen (Simulador Estratégico)")
+st.header("IV. Optimizador de Margen (Simulador Estratégico)")
 # 1. Selección de Producto para el Simulador
 prod_sim = st.selectbox("Seleccione un producto para simular:",
                         df_margen_raw['Nombre Artículo'].unique())
