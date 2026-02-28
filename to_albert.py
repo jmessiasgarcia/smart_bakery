@@ -247,7 +247,7 @@ st.plotly_chart(fig_line, use_container_width=True)
 # --- CÁLCULOS PARA KPIs DE CLIENTES ---
 
 st.divider()
-st.header("Análisis de la Estructura de Ventas")
+st.subheader("Análisis de la Estructura de Ventas")
 
 # st.markdown("######    Indicadores Clave de Rendimiento")
 
@@ -373,7 +373,7 @@ st.info("""
 """)
 
 st.divider()
-st.header("Retención y Fidelidad")
+st.header("II. Retención y Fidelidad")
 
 
 clientes_2025 = df_areas[df_areas['Euros 2025'] > 0]
@@ -419,14 +419,6 @@ k2.metric(
     delta_color="normal"
 )
 
-# KPI 3: Valor Medio por Cliente (Anual)
-# k3.metric(
-#     label="Inversión Media Anual",
-#     value=f"{ticket_medio_25:,.2f} €",
-#     delta="Gasto por cliente/año"
-# )
-
-# KPI 4: Clientes Fantasma (Base Inactiva)
 fantasmas = len(df_areas[df_areas.apply(
     lambda x: x['Euros 2023']+x['Euros 2024']+x['Euros 2025'] <= 0, axis=1)])
 k3.metric(
@@ -518,11 +510,255 @@ with col2:
     st.plotly_chart(fig_bar, width='stretch')
 
 # --- FASE 2: RENTABILIDAD --
+st.divider()
+st.subheader("Tasa de Retención Mensual (Fidelidad Real)")
+
+# 1. Preparar datos (Clientes únicos por mes)
+df_fase1['Mes_Año'] = df_fase1['Fecha'].dt.to_period('M')
+clientes_por_mes = df_fase1.groupby(
+    'Mes_Año')['Código cliente'].apply(set).reset_index()
+
+retencion_mensual = []
+for i in range(len(clientes_por_mes) - 1):
+    clientes_actual = clientes_por_mes.iloc[i]['Código cliente']
+    clientes_siguiente = clientes_por_mes.iloc[i+1]['Código cliente']
+
+    recurrentes = clientes_actual.intersection(clientes_siguiente)
+    tasa = (len(recurrentes) / len(clientes_actual)) * \
+        100 if len(clientes_actual) > 0 else 0
+
+    retencion_mensual.append({
+        # Convertimos a timestamp para el eje X
+        'Mes': clientes_por_mes.iloc[i+1]['Mes_Año'].to_timestamp(),
+        'Tasa_Retencion': tasa
+    })
+
+df_retencion = pd.DataFrame(retencion_mensual)
+
+# 2. Crear Gráfico
+fig_ret = px.line(
+    df_retencion, x='Mes', y='Tasa_Retencion',
+    markers=True, line_shape='spline',
+    color_discrete_sequence=['#15F2A8']
+)
+
+# --- AÑADIR SHADOWS ANUALES ---
+start_year = df_retencion['Mes'].min().year
+end_year = df_retencion['Mes'].max().year
+
+for year in range(start_year, end_year + 1):
+    # Usamos colores sutiles para no tapar la línea verde
+    color_shadow = "rgba(100, 149, 237, 0.04)" if year % 2 == 0 else "rgba(255, 255, 255, 0.02)"
+
+    fig_ret.add_vrect(
+        x0=f"{year}-01-01", x1=f"{year}-12-31",
+        fillcolor=color_shadow, layer="below", line_width=0,
+        annotation_text=str(year), annotation_position="top left",
+        annotation_font=dict(color="rgba(255,255,255,0.3)")
+    )
+
+# 3. Estética final
+fig_ret.update_layout(
+    template="plotly_dark",
+    yaxis=dict(title="Retención (%)", range=[0, 110], showgrid=False),
+    xaxis=dict(title="", showgrid=False),
+    height=450
+)
+
+st.plotly_chart(fig_ret, use_container_width=True)
+
+# --- COLOCAR JUSTO DEBAJO DEL st.plotly_chart(fig_ret) ---
+
+st.info(f"""
+**Cómo leer este gráfico de Fidelidad Mensual:**
+
+* **¿Qué mide?**: El porcentaje de clientes que compraron el mes pasado y han vuelto a comprar en el mes actual. Es el mejor indicador de la **salud real** del negocio.
+* **La Línea Verde**: Representa la consistencia. Si se mantiene alta (ej. >80%), significa que tienes una base de clientes cautiva muy sólida.
+* **Las Sombras (Shadows)**: Separan los años fiscales. Permiten ver si la retención cae siempre en las mismas fechas (como agosto o periodos vacacionales).
+* **Interpretación**: 
+    * **Subida**: Estamos fidelizando mejor a los nuevos clientes.
+    * **Bajada**: Alerta. Los clientes están probando el producto pero no regresan. Es momento de revisar calidad o servicio.
+""")
 
 st.divider()
-st.header("Optimizador de Margen (Simulador Estratégico)")
-st.info("Utilice esta calculadora para ajustar precios o descuentos y ver el impacto inmediato en la rentabilidad.")
+st.subheader("Análisis de Pareto: Concentración de Clientes")
 
+# 1. Usamos el DataFrame que contiene el detalle por cliente
+# AJUSTA AQUÍ: Cambia 'df_fase1' por el nombre de tu variable que carga 'facturacion_limpia.csv'
+df_p = df_fase1.copy()
+
+try:
+    # Agrupamos por 'Código cliente' sumando su facturación total
+    df_pareto = df_p.groupby('Código cliente')['Importe_Euros'].sum(
+    ).sort_values(ascending=False).reset_index()
+
+    # 2. Cálculos de porcentajes acumulados
+    df_pareto['Ventas_Acum_Perc'] = (
+        df_pareto['Importe_Euros'].cumsum() / df_pareto['Importe_Euros'].sum()) * 100
+    df_pareto['Clientes_Acum_Perc'] = (
+        (df_pareto.index + 1) / len(df_pareto)) * 100
+
+    # 3. Gráfico de Pareto (Curva de Lorenz)
+    fig_pareto = go.Figure()
+
+    # Área de la curva
+    fig_pareto.add_trace(go.Scatter(
+        x=df_pareto['Clientes_Acum_Perc'],
+        y=df_pareto['Ventas_Acum_Perc'],
+        fill='tozeroy',
+        name='Venta Acumulada',
+        line=dict(color='#15F2A8', width=3),
+        hovertemplate="<b>% de Clientes:</b> %{x:.1f}%<br><b>% de Ventas:</b> %{y:.1f}%<extra></extra>"
+    ))
+
+    # Línea del 80/20 (Punto crítico)
+    fig_pareto.add_hline(y=80, line_dash="dot", line_color="#E433C7",
+                         annotation_text="Límite 80% Ventas", annotation_position="bottom right")
+
+    fig_pareto.add_vline(x=20, line_dash="dot",
+                         line_color="rgba(255,255,255,0.5)")
+
+    fig_pareto.update_layout(
+        template="plotly_dark",
+        xaxis_title="% de Clientes (Ordenados de mayor a menor gasto)",
+        yaxis_title="% de Facturación Total",
+        yaxis=dict(range=[0, 105], ticksuffix="%"),
+        xaxis=dict(range=[0, 100], ticksuffix="%"),
+        height=450,
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+
+    st.plotly_chart(fig_pareto, use_container_width=True)
+
+    # 4. KPI de Interpretación
+    v20 = df_pareto[df_pareto['Clientes_Acum_Perc']
+                    <= 20]['Ventas_Acum_Perc'].max()
+
+    st.info(f"""
+    **Diagnóstico de Pareto:**
+    El **20%** de tus clientes actuales representan el **{v20:.1f}%** de tus ingresos totales.
+    
+    * **Si es cercano al 80%**: El negocio depende críticamente de unos pocos clientes (fidelización vital).
+    * **Si es cercano al 30-40%**: El negocio está muy diversificado, lo cual es muy seguro ante bajas de clientes.
+    """)
+
+except Exception as e:
+    st.error(
+        f"Error: Asegúrate de que el DataFrame contiene la columna 'Código cliente'. Detalle: {e}")
+
+st.subheader("Nuestros 10 Clientes 'Imprescindibles'")
+
+# 1. Preparamos los datos
+top_10_clientes = df_pareto.head(10).copy()
+
+# 2. Quitamos los decimales y ponemos formato moneda (punto para miles)
+top_10_clientes['Importe_Euros'] = top_10_clientes['Importe_Euros'].apply(
+    lambda x: f"{int(x):,}".replace(",", ".") + " €"
+)
+
+# 3. Limpiamos el nombre del NaN si existe
+top_10_clientes['Código cliente'] = top_10_clientes['Código cliente'].fillna(
+    'Venta No Identificada')
+
+# 4. Lo mostramos en el expander
+with st.expander("Ver detalle de Clientes VIP", expanded=False):
+    st.table(top_10_clientes[['Código cliente', 'Importe_Euros']])
+
+
+st.warning(f"""
+El **Cliente 2117** es el motor de la fábrica, pero eso nos pone en una situación delicada: **si ellos dejan de comprar, el negocio sufre un golpe durísimo de la noche a la mañana.**
+
+**¿Qué te sugiero como estrategia para este año?**
+
+1.  **Mima al Gigante, pero busca hermanos:** No dejes de cuidar al Cliente 2117, pero nuestra prioridad debería ser captar otros 2 o 3 clientes de ese perfil para repartir el peso de la facturación.
+2.  **Ponle cara a los 'desconocidos':** Tenemos **350.000 €** en ventas (el grupo 'Venta No Identificada') que no sabemos quiénes son. Si logramos fidelizar a una parte de ellos y registrarlos, crearemos una red de seguridad mucho más estable.
+3.  **Diversificar es ganar salud:** Cuantos más clientes medianos tengamos, menos poder tendrá un solo cliente sobre el futuro de tu panadería.
+
+""")
+
+st.divider()
+
+st.header(f"Auditoría de Cuenta Clave")
+
+# 1. Aseguramos que la columna sea numérica para evitar errores de comparación
+df_p['Código cliente'] = pd.to_numeric(df_p['Código cliente'], errors='coerce')
+
+# 2. Caja de entrada (usamos text_input para tener más control o number_input)
+id_cliente_audit = st.number_input(
+    "Escribe el código del cliente para investigar:", value=2117, step=1)
+
+# 3. FILTRADO DINÁMICO (Forzamos la comparación a entero)
+df_audit = df_p[df_p['Código cliente'] == id_cliente_audit].copy()
+
+if not df_audit.empty:
+    # --- MÉTRICAS ---
+    total_v = df_audit['Importe_Euros'].sum()
+
+    # Intentamos buscar la columna de facturas, si no existe, contamos registros
+    if 'Factura' in df_audit.columns:
+        pedidos_v = df_audit['Factura'].nunique()
+        etiqueta_pedidos = "Nº de Facturas"
+    else:
+        pedidos_v = len(df_audit)
+        etiqueta_pedidos = "Nº de Operaciones"
+
+    col1, col2 = st.columns(2)
+    col1.metric(f"Facturación Total",
+                f"{int(total_v):,}".replace(",", ".") + " €")
+    col2.metric(etiqueta_pedidos, pedidos_v)
+
+    # --- GRÁFICO TENDENCIA CON SOMBRAS ANUALES ---
+    st.subheader("📈 Evolución de compras mensuales")
+
+    df_tendencia = df_audit.groupby(df_audit['Fecha'].dt.to_period('M'))[
+        'Importe_Euros'].sum().reset_index()
+    df_tendencia['Fecha'] = df_tendencia['Fecha'].astype(str)
+
+    # Crear la base del gráfico
+    fig_tend = px.line(df_tendencia, x='Fecha', y='Importe_Euros',
+                       markers=True, color_discrete_sequence=['#15F2A8'])
+
+    # Extraer los años únicos para crear las sombras
+    df_tendencia['Año'] = df_tendencia['Fecha'].str[:4]
+    años_unicos = df_tendencia['Año'].unique()
+
+    # Añadir sombras discretas alternas para cada año
+    for i, anio in enumerate(años_unicos):
+        # Sombreamos solo los años pares (o impares) para crear contraste
+        if i % 2 == 0:
+            # Buscamos el primer y último mes de ese año en los datos
+            meses_anio = df_tendencia[df_tendencia['Año'] == anio]['Fecha']
+
+            fig_tend.add_vrect(
+                x0=meses_anio.iloc[0],
+                x1=meses_anio.iloc[-1],
+                fillcolor="white",
+                opacity=0.05,  # Sombra muy discreta
+                layer="below",
+                line_width=0,
+                annotation_text=anio,
+                annotation_position="top left"
+            )
+
+    # Estética final
+    fig_tend.update_layout(
+        template="plotly_dark",
+        xaxis_title="Meses",
+        yaxis_title="Facturación (€)",
+        hovermode="x unified",
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+
+    st.plotly_chart(fig_tend, use_container_width=True)
+
+
+else:
+    st.warning(
+        f"No se han encontrado datos para el cliente {int(id_cliente_audit)}. Verifica si el código es correcto en la tabla superior.")
+
+
+st.divider()
+st.header("III. Optimizador de Margen (Simulador Estratégico)")
 # 1. Selección de Producto para el Simulador
 prod_sim = st.selectbox("Seleccione un producto para simular:",
                         df_margen_raw['Nombre Artículo'].unique())
@@ -570,9 +806,9 @@ res2.metric("Nuevo Margen %", f"{nuevo_margen_porc:.1%}",
 res3.metric("Margen por Unidad (€)", f"{nuevo_margen_euro:.3f} €")
 
 # 4. Consejo Estratégico automático
-if nuevo_margen_porc < 0.3:
+if nuevo_margen_porc < 0.1:
     st.error(
-        f"⚠️ Atención: Con estos ajustes, el margen sigue por debajo del objetivo del 30%. Se recomienda subir el multiplicador a más de {(0.3 + (coste_u/(nueva_venta_bruta*(1-nuevo_dto)) if nueva_venta_bruta > 0 else 0)):.1f}")
+        f"Atención: Con estos ajustes, el margen sigue por debajo del objetivo del 10%. Se recomienda subir el multiplicador a más de {(0.3 + (coste_u/(nueva_venta_bruta*(1-nuevo_dto)) if nueva_venta_bruta > 0 else 0)):.1f}")
 else:
     st.success(
         "Objetivo alcanzado: Este ajuste sitúa al producto en la zona de alta rentabilidad.")
@@ -580,7 +816,7 @@ else:
 
 st.divider()
 # --- SECCIÓN 2: OPTIMIZACIÓN DEL MARGEN Y RENTABILIDAD ---
-st.header("II. Matriz de Decisión")
+st.header("IV. Matriz de Decisión")
 st.markdown("""
     ###### Solo se han analizado productos con un **Margen > 30%**.
 """)
@@ -718,7 +954,7 @@ with st.expander("Listado Detallado"):
 st.divider()
 
 
-st.header("III. Smart Bakery App: Motor de Inteligencia Predictiva")
+st.header("V. Smart Bakery App: Motor de Inteligencia Predictiva")
 
 st.markdown("""
     Para garantizar que el modelo de Machine Learning aporte el máximo valor operativo, he aplicado un **filtro de viabilidad**:
@@ -1099,7 +1335,7 @@ else:
 
 # --- SECCIÓN: ACCESO A DATOS (RAW DATA) ---
 st.markdown("---")
-st.header("IV. Centro de Datos (Raw Data)")
+st.header("VI. Centro de Datos (Raw Data)")
 
 with st.expander("Inspeccionar tablas de análisis y entrenamiento"):
     tab1, tab2, tab3 = st.tabs([
@@ -1177,7 +1413,40 @@ with col_exp2:
 st.caption("© 2026 Smart Bakery Solutions | Strategic Data Analysis")
 
 st.divider()
-st.header("V. Centro de Control")
+
+
+# Creamos un diccionario con todas las tablas clave de tu proyecto
+tablas_proyecto = {
+    # El Excel de Alberto tal cual
+    "1. Raw Data (Original)": df_final,
+    # Tras quitar nulos y corregir IDs
+    "2. Data Cleaned (Limpio)": df_margen_raw,
+    # La tabla que mostraste con Lag_1, Lag_2...
+    "3. Features (Lags)": df_areas,
+    # Variables de entrada para la IA
+    "5. Predictions (Output)": df_proj            # El resultado final de la IA
+}
+
+
+# Cargar los datos
+df_rec = pd.read_excel('recomendation.xlsx')
+
+st.header("VII. Estrategias de Venta Cruzada")
+
+# Filtro para que el usuario busque un producto
+producto = st.selectbox("Selecciona un producto:",
+                        df_rec['Producto_1'].unique())
+
+# Filtrar y mostrar
+resultado = df_rec[df_rec['Producto_1'] == producto]
+st.dataframe(resultado[['Producto_2', 'Correlacion',
+             'Recomendacion_Comercial']], hide_index=True)
+
+st.info("""La correlación mide la fuerza de la relación entre dos productos. 
+        Cuanto más próximo sea el valor a **1**, mayor es la probabilidad de que se compren juntos.""")
+st.divider()
+
+st.header("VIII. Centro de Control")
 
 # El botón de subida
 uploaded_file = st.file_uploader(
@@ -1203,10 +1472,85 @@ if st.button("Finalizar Presentación Estratégica"):
     st.balloons()
     st.snow()  # Un toque extra para que parezca confeti cayendo
 
+st.divider()
+
+
+st.header("Auditoría de Estructura de Datos")
+
+for nombre, df in tablas_proyecto.items():
+    with st.expander(f"Ver estructura de: {nombre}"):
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Filas", df.shape[0])
+        col2.metric("Columnas", df.shape[1])
+        col3.write(f"**Columnas clave:** {', '.join(df.columns[:5])}...")
+
+        # Mostramos las primeras 5 filas para que se vea el contenido
+        st.dataframe(df.head(5), use_container_width=True)
+
+
 # --- ESTO DEBE IR AL FINAL DE TODO, FUERA DE LOS BUCLES ---
 st.write("")  # Un espacio en blanco
-st.write("")
-st.markdown("---")  # Línea divisoria
+
+st.divider()
+st.header("IX.Mapa de Calor: Estacionalidad de Top 15 Productos")
+
+# 1. Asegurar que trabajamos sobre una copia de df_final con fechas correctas
+df_heat = df_final.copy()
+df_heat['Fecha'] = pd.to_datetime(df_heat['Fecha'])
+
+# 2. Identificar los Top 10 productos (basados en df_final)
+top_10_nombres = (
+    df_heat.groupby('Nombre Artículo')['Importe_Euros']
+    .sum()
+    .nlargest(15)
+    .index
+)
+
+# 3. Filtrar solo los productos top
+df_heat_filtered = df_heat[df_heat['Nombre Artículo'].isin(
+    top_10_nombres)].copy()
+
+# 4. Crear columnas temporales
+df_heat_filtered['Mes_Num'] = df_heat_filtered['Fecha'].dt.month
+# Usamos un diccionario para nombres cortos de meses
+meses_nombres = {
+    1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun',
+    7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
+}
+
+# 5. Crear la tabla pivote
+heatmap_data = df_heat_filtered.pivot_table(
+    index='Nombre Artículo',
+    columns='Mes_Num',
+    values='Importe_Euros',
+    aggfunc='sum'
+).fillna(0)
+
+# Renombrar columnas de números a nombres de meses
+heatmap_data.columns = [meses_nombres[c] for c in heatmap_data.columns]
+
+# 6. Dibujar el Heatmap
+fig_heat = px.imshow(
+    heatmap_data,
+    labels=dict(x="Mes", y="Producto", color="Ventas (€)"),
+    x=heatmap_data.columns,
+    y=heatmap_data.index,
+    color_continuous_scale='YlGnBu',  # más claro y profesional
+    aspect="auto",
+    title="Intensidad de Ventas Mensuales por Producto (Top 10)"
+)
+
+
+fig_heat.update_layout(
+    template="plotly_dark",
+    height=500,
+    xaxis_nticks=12
+)
+
+st.plotly_chart(fig_heat, use_container_width=True)
+
+st.divider()
+
 
 # Creamos columnas para que quede alineado
 col_c1, col_c2 = st.columns([3, 1])
@@ -1218,28 +1562,3 @@ with col_c1:
 
 with col_c2:
     st.caption("v1.0.4-stable 🚀")
-
-
-# Creamos un diccionario con todas las tablas clave de tu proyecto
-tablas_proyecto = {
-    # El Excel de Alberto tal cual
-    "1. Raw Data (Original)": df_final,
-    # Tras quitar nulos y corregir IDs
-    "2. Data Cleaned (Limpio)": df_margen_raw,
-    # La tabla que mostraste con Lag_1, Lag_2...
-    "3. Features (Lags)": df_areas,
-    # Variables de entrada para la IA
-    "5. Predictions (Output)": df_proj            # El resultado final de la IA
-}
-
-st.header("📋 Auditoría de Estructura de Datos")
-
-for nombre, df in tablas_proyecto.items():
-    with st.expander(f"Ver estructura de: {nombre}"):
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Filas", df.shape[0])
-        col2.metric("Columnas", df.shape[1])
-        col3.write(f"**Columnas clave:** {', '.join(df.columns[:5])}...")
-
-        # Mostramos las primeras 5 filas para que se vea el contenido
-        st.dataframe(df.head(5), use_container_width=True)
