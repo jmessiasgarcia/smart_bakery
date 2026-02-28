@@ -88,7 +88,7 @@ st.markdown("""
 df_filtrado = df_fase1
 
 # --- SECCIÓN 1 ---
-st.header("I. Diagnóstico de Salud de Cartera y Pulso de Mercado")
+st.header("I. Salud de Cartera y Pulso de Mercado")
 
 OBJETIVO_VENTAS = 1500000  # nao utilizo
 OBJETIVO_CLIENTES = 500    # nao utilizo
@@ -247,7 +247,7 @@ st.plotly_chart(fig_line, use_container_width=True)
 # --- CÁLCULOS PARA KPIs DE CLIENTES ---
 
 st.divider()
-st.subheader("Análisis de la Estructura de Ventas")
+st.subheader("Estructura de Ventas")
 
 # st.markdown("######    Indicadores Clave de Rendimiento")
 
@@ -305,7 +305,7 @@ fig_dist = px.histogram(
     x="Importe_Euros",
     nbins=250,
     marginal="box",
-    title="Análisis de Gasto: Distribución y Outliers",
+    title="Distribución y Outliers",
     labels={
         'Importe_Euros': 'Importe del Ticket (€)'},
     color_discrete_sequence=["#2EC18E"],
@@ -367,8 +367,7 @@ fig_dist.update_yaxes(title_text="Frecuencia", showgrid=False, zeroline=False)
 st.plotly_chart(fig_dist, use_container_width=True)
 
 st.info("""
-    **Análisis Estratégico:**
-    * **La Mediana (Línea Roja):** Es el punto exacto donde se divide tu clientela. El 50% de tus pedidos están por debajo de este valor y el otro 50% por encima.
+    * **La Mediana (Línea Roja):** Es el punto exacto donde se divide nuestros clientes. El 50% de los pedidos están por debajo de este valor y el otro 50% por encima.
     * **Impacto en el Desperdicio:** Entender el ticket típico nos ayuda a prever cuántas unidades de cada producto se llevan en promedio. Si el ticket mediano sube pero las unidades bajan, significa que vendemos productos más caros (más margen, menos merma logística).
 """)
 
@@ -514,6 +513,7 @@ st.divider()
 st.subheader("Tasa de Retención Mensual (Fidelidad Real)")
 
 # 1. Preparar datos (Clientes únicos por mes)
+
 df_fase1['Mes_Año'] = df_fase1['Fecha'].dt.to_period('M')
 clientes_por_mes = df_fase1.groupby(
     'Mes_Año')['Código cliente'].apply(set).reset_index()
@@ -574,7 +574,7 @@ st.info(f"""
 
 * **¿Qué mide?**: El porcentaje de clientes que compraron el mes pasado y han vuelto a comprar en el mes actual. Es el mejor indicador de la **salud real** del negocio.
 * **La Línea Verde**: Representa la consistencia. Si se mantiene alta (ej. >80%), significa que tienes una base de clientes cautiva muy sólida.
-* **Las Sombras (Shadows)**: Separan los años fiscales. Permiten ver si la retención cae siempre en las mismas fechas (como agosto o periodos vacacionales).
+* **Las Sombras (Shadows)**: Separan los años. Permiten ver si la retención cae siempre en las mismas fechas (como agosto o periodos vacacionales).
 * **Interpretación**: 
     * **Subida**: Estamos fidelizando mejor a los nuevos clientes.
     * **Bajada**: Alerta. Los clientes están probando el producto pero no regresan. Es momento de revisar calidad o servicio.
@@ -636,7 +636,7 @@ try:
 
     st.info(f"""
     **Diagnóstico de Pareto:**
-    El **20%** de tus clientes actuales representan el **{v20:.1f}%** de tus ingresos totales.
+    El **20%** de los clientes actuales representan el **{v20:.1f}%** de tus ingresos totales.
     
     * **Si es cercano al 80%**: El negocio depende críticamente de unos pocos clientes (fidelización vital).
     * **Si es cercano al 30-40%**: El negocio está muy diversificado, lo cual es muy seguro ante bajas de clientes.
@@ -671,14 +671,14 @@ El **Cliente 2117** es el motor de la fábrica, pero eso nos pone en una situaci
 **¿Qué te sugiero como estrategia para este año?**
 
 1.  **Mima al Gigante, pero busca hermanos:** No dejes de cuidar al Cliente 2117, pero nuestra prioridad debería ser captar otros 2 o 3 clientes de ese perfil para repartir el peso de la facturación.
-2.  **Ponle cara a los 'desconocidos':** Tenemos **350.000 €** en ventas (el grupo 'Venta No Identificada') que no sabemos quiénes son. Si logramos fidelizar a una parte de ellos y registrarlos, crearemos una red de seguridad mucho más estable.
-3.  **Diversificar es ganar salud:** Cuantos más clientes medianos tengamos, menos poder tendrá un solo cliente sobre el futuro de tu panadería.
+2.  **Ponle cara a los 'desconocidos':** Tenemos **350.000 €** en ventas (el grupo 'Venta No Identificada') que no sabemos quiénes son. Es fundamental investigar de dónde vienen esas ventas para ver si podemos convertir a esos clientes anónimos en clientes VIP identificados.
+3.  **Diversificar es ganar salud:** Cuantos más clientes medianos tengamos menos poder tendrá un solo cliente sobre el futuro de tu panadería.
 
 """)
 
 st.divider()
 
-st.header(f"Auditoría de Cuenta Clave")
+st.subheader(f"Detalle de Cliente")
 
 # 1. Aseguramos que la columna sea numérica para evitar errores de comparación
 df_p['Código cliente'] = pd.to_numeric(df_p['Código cliente'], errors='coerce')
@@ -708,7 +708,7 @@ if not df_audit.empty:
     col2.metric(etiqueta_pedidos, pedidos_v)
 
     # --- GRÁFICO TENDENCIA CON SOMBRAS ANUALES ---
-    st.subheader("📈 Evolución de compras mensuales")
+    st.subheader("Evolución de compras mensuales")
 
     df_tendencia = df_audit.groupby(df_audit['Fecha'].dt.to_period('M'))[
         'Importe_Euros'].sum().reset_index()
@@ -953,8 +953,26 @@ with st.expander("Listado Detallado"):
         st.dataframe(df_rev, width='stretch', hide_index=True)
 st.divider()
 
+# Cargar los datos
+df_rec = pd.read_excel('recomendation.xlsx')
 
-st.header("V. Smart Bakery App: Motor de Inteligencia Predictiva")
+st.header("V. Estrategias de Venta Cruzada")
+
+# Filtro para que el usuario busque un producto
+producto = st.selectbox("Selecciona un producto:",
+                        df_rec['Producto_1'].unique())
+
+# Filtrar y mostrar
+resultado = df_rec[df_rec['Producto_1'] == producto]
+st.dataframe(resultado[['Producto_2', 'Correlacion',
+             'Recomendacion_Comercial']], hide_index=True)
+
+st.info("""La correlación mide la fuerza de la relación entre dos productos. 
+        Cuanto más próximo sea el valor a **1**, mayor es la probabilidad de que se compren juntos.""")
+st.divider()
+
+
+st.header("VI. Smart Bakery App: Motor de Inteligencia Predictiva")
 
 st.markdown("""
     Para garantizar que el modelo de Machine Learning aporte el máximo valor operativo, he aplicado un **filtro de viabilidad**:
@@ -1031,14 +1049,12 @@ try:
                 if avg_mae < best_mae:
                     best_mae, best_params = avg_mae, params
 
-            # JOAN
-
             final_model = RandomForestRegressor(
                 **best_params, random_state=42).fit(X_p, y_p)
             y_pred_h = final_model.predict(X_p)
             r2_p = r2_score(y_p, y_pred_h)
 
-            st.subheader(f"Métricas de Confianza: {productos_dict[id_sel]}")
+            st.subheader(f"Predicción para: {productos_dict[id_sel]}")
             m1, m2, m3, m4, m5, m6 = st.columns(6)
 
            # JOAN
@@ -1230,7 +1246,6 @@ except Exception as e:
     st.error(f"Error en el motor predictivo: {e}")
 
 # --- SECCIÓN FINAL: CONCLUSIONES ESTRATÉGICAS ---
-st.divider()
 
 
 st.subheader(
@@ -1335,7 +1350,7 @@ else:
 
 # --- SECCIÓN: ACCESO A DATOS (RAW DATA) ---
 st.markdown("---")
-st.header("VI. Centro de Datos (Raw Data)")
+st.header("VII. Centro de Datos (Raw Data) y Información Clave para la IA")
 
 with st.expander("Inspeccionar tablas de análisis y entrenamiento"):
     tab1, tab2, tab3 = st.tabs([
@@ -1410,7 +1425,6 @@ with col_exp2:
     * Al limitar la **Profundidad (Max Depth)**, obligamos a la IA a aprender patrones generales y no errores del pasado, garantizando esa **Robustez del 80%**.
     """)
 
-st.caption("© 2026 Smart Bakery Solutions | Strategic Data Analysis")
 
 st.divider()
 
@@ -1428,128 +1442,50 @@ tablas_proyecto = {
 }
 
 
-# Cargar los datos
-df_rec = pd.read_excel('recomendation.xlsx')
+# st.header("VIII. Centro de Control")
 
-st.header("VII. Estrategias de Venta Cruzada")
+# # El botón de subida
+# uploaded_file = st.file_uploader(
+#     "", type=['csv', 'xlsx'])
 
-# Filtro para que el usuario busque un producto
-producto = st.selectbox("Selecciona un producto:",
-                        df_rec['Producto_1'].unique())
+# if uploaded_file is not None:
+#     # Si Alberto sube un archivo, la App lo lee
+#     if uploaded_file.name.endswith('.csv'):
+#         df_final = pd.read_csv(uploaded_file)
+#     else:
+#         df_final = pd.read_excel(uploaded_file)
 
-# Filtrar y mostrar
-resultado = df_rec[df_rec['Producto_1'] == producto]
-st.dataframe(resultado[['Producto_2', 'Correlacion',
-             'Recomendacion_Comercial']], hide_index=True)
+#     st.success("✅ Datos cargados correctamente. ¡Smart Bakery está listo!")
 
-st.info("""La correlación mide la fuerza de la relación entre dos productos. 
-        Cuanto más próximo sea el valor a **1**, mayor es la probabilidad de que se compren juntos.""")
-st.divider()
-
-st.header("VIII. Centro de Control")
-
-# El botón de subida
-uploaded_file = st.file_uploader(
-    "", type=['csv', 'xlsx'])
-
-if uploaded_file is not None:
-    # Si Alberto sube un archivo, la App lo lee
-    if uploaded_file.name.endswith('.csv'):
-        df_final = pd.read_csv(uploaded_file)
-    else:
-        df_final = pd.read_excel(uploaded_file)
-
-    st.success("✅ Datos cargados correctamente. ¡Smart Bakery está listo!")
-
-    # AQUÍ IRÍA EL RESTO DE TU CÓDIGO (EL MODELO, LOS GRÁFICOS, ETC.)
-    # ...
-else:
-    st.info("Por favor, sube un archivo para comenzar el análisis.")
+#     # AQUÍ IRÍA EL RESTO DE TU CÓDIGO (EL MODELO, LOS GRÁFICOS, ETC.)
+#     # ...
+# else:
+#     st.info("Por favor, sube un archivo para comenzar el análisis.")
 
 
-# El Gran Final
-if st.button("Finalizar Presentación Estratégica"):
-    st.balloons()
-    st.snow()  # Un toque extra para que parezca confeti cayendo
-
-st.divider()
+# # El Gran Final
+# if st.button("Finalizar Presentación Estratégica"):
+#     st.balloons()
+#     st.snow()  # Un toque extra para que parezca confeti cayendo
 
 
-st.header("Auditoría de Estructura de Datos")
+# st.header("Auditoría de Estructura de Datos")
 
-for nombre, df in tablas_proyecto.items():
-    with st.expander(f"Ver estructura de: {nombre}"):
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Filas", df.shape[0])
-        col2.metric("Columnas", df.shape[1])
-        col3.write(f"**Columnas clave:** {', '.join(df.columns[:5])}...")
+# for nombre, df in tablas_proyecto.items():
+#     with st.expander(f"Ver estructura de: {nombre}"):
+#         col1, col2, col3 = st.columns(3)
+#         col1.metric("Filas", df.shape[0])
+#         col2.metric("Columnas", df.shape[1])
+#         col3.write(f"**Columnas clave:** {', '.join(df.columns[:5])}...")
 
-        # Mostramos las primeras 5 filas para que se vea el contenido
-        st.dataframe(df.head(5), use_container_width=True)
-
-
-# --- ESTO DEBE IR AL FINAL DE TODO, FUERA DE LOS BUCLES ---
-st.write("")  # Un espacio en blanco
-
-st.divider()
-st.header("IX.Mapa de Calor: Estacionalidad de Top 15 Productos")
-
-# 1. Asegurar que trabajamos sobre una copia de df_final con fechas correctas
-df_heat = df_final.copy()
-df_heat['Fecha'] = pd.to_datetime(df_heat['Fecha'])
-
-# 2. Identificar los Top 10 productos (basados en df_final)
-top_10_nombres = (
-    df_heat.groupby('Nombre Artículo')['Importe_Euros']
-    .sum()
-    .nlargest(15)
-    .index
-)
-
-# 3. Filtrar solo los productos top
-df_heat_filtered = df_heat[df_heat['Nombre Artículo'].isin(
-    top_10_nombres)].copy()
-
-# 4. Crear columnas temporales
-df_heat_filtered['Mes_Num'] = df_heat_filtered['Fecha'].dt.month
-# Usamos un diccionario para nombres cortos de meses
-meses_nombres = {
-    1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun',
-    7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
-}
-
-# 5. Crear la tabla pivote
-heatmap_data = df_heat_filtered.pivot_table(
-    index='Nombre Artículo',
-    columns='Mes_Num',
-    values='Importe_Euros',
-    aggfunc='sum'
-).fillna(0)
-
-# Renombrar columnas de números a nombres de meses
-heatmap_data.columns = [meses_nombres[c] for c in heatmap_data.columns]
-
-# 6. Dibujar el Heatmap
-fig_heat = px.imshow(
-    heatmap_data,
-    labels=dict(x="Mes", y="Producto", color="Ventas (€)"),
-    x=heatmap_data.columns,
-    y=heatmap_data.index,
-    color_continuous_scale='YlGnBu',  # más claro y profesional
-    aspect="auto",
-    title="Intensidad de Ventas Mensuales por Producto (Top 10)"
-)
+#         # Mostramos las primeras 5 filas para que se vea el contenido
+#         st.dataframe(df.head(5), use_container_width=True)
 
 
-fig_heat.update_layout(
-    template="plotly_dark",
-    height=500,
-    xaxis_nticks=12
-)
+# # --- ESTO DEBE IR AL FINAL DE TODO, FUERA DE LOS BUCLES ---
+# st.write("")  # Un espacio en blanco
 
-st.plotly_chart(fig_heat, use_container_width=True)
-
-st.divider()
+# st.divider()
 
 
 # Creamos columnas para que quede alineado
