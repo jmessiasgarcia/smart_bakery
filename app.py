@@ -19,7 +19,7 @@ logging.getLogger(
 
 # 1. CONFIGURACIÓN DE LA PÁGINA
 st.set_page_config(
-    page_title="🥐 Dashboard Rentabilidad Alberto", layout="wide")
+    page_title="🥐 Dashboard Rentabilidad", layout="wide")
 
 # LOADING DATA
 
