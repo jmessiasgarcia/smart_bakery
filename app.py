@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
@@ -56,6 +57,11 @@ def load_data():
                 df_margen_raw[col], errors='coerce')
 
     return df_facturacion_zonas, df_final, df_margen_raw, df_a
+
+
+# --- ESTA LÍNEA ES LA CLAVE ---
+# Aquí "recibimos" las 4 cosas que tu función devuelve (return)
+df_facturacion_zonas, df_final, df_margen_raw, df_a = load_data()
 
 # --- LÓGICA DE SEGMENTACIÓN ---
 
@@ -242,7 +248,7 @@ fig_line.update_layout(
                spikecolor="#999999", spikesnap="data")
 )
 
-st.plotly_chart(fig_line, use_container_width=True)
+st.plotly_chart(fig_line, width='stretch')
 
 # --- CÁLCULOS PARA KPIs DE CLIENTES ---
 
@@ -270,30 +276,6 @@ top_20_count = int(len(df_sorted) * 0.2)
 ingresos_top_20 = df_sorted.iloc[:top_20_count]['Importe_Euros'].sum()
 total_ingresos = df_filtrado['Importe_Euros'].sum()
 pareto_val = ingresos_top_20 / total_ingresos if total_ingresos > 0 else 0
-
-# --- KPI ---
-# Puedes ponerlo en una nueva fila de columnas
-# ik1, ik2 = st.columns(2)
-
-# ik1.metric(
-#     label="Dependencia VIP (Pareto)",
-#     value=f"{pareto_val:.1%}",
-#     delta="Top 20% pedidos",
-#     help="Indica qué porcentaje de tus ingresos totales provienen del 20% de los pedidos más caros."
-# )
-
-# ik2.metric(
-#     label="Ticket Máximo Normal",
-#     value=f"{limite_superior:,.0f} €",
-#     delta="Excluyendo el 10% VIP",
-#     help="El techo de gasto de un cliente estándar antes de entrar en la categoría de pedidos excepcionales."
-# )
-
-
-# --- TU GRÁFICO (FILTRADO Y CON MEDIANA) ---
-# --- HISTOGRAMA + BOXPLOT (ANÁLISIS DE OUTLIERS) ---
-# --- HISTOGRAMA + BOXPLOT: VERSIÓN FINAL CON LEYENDA ---
-
 
 # 1. Preparación de datos
 df_hist_pos = df_hist[df_hist['Importe_Euros'] > 0]
@@ -364,68 +346,91 @@ fig_dist.update_layout(
 
 fig_dist.update_yaxes(title_text="Frecuencia", showgrid=False, zeroline=False)
 
-st.plotly_chart(fig_dist, use_container_width=True)
+st.plotly_chart(fig_dist, width='stretch')
 
 st.info("""
     * **La Mediana (Línea Roja):** Es el punto exacto donde se divide nuestros clientes. El 50% de los pedidos están por debajo de este valor y el otro 50% por encima.
     * **Impacto en el Desperdicio:** Entender el ticket típico nos ayuda a prever cuántas unidades de cada producto se llevan en promedio. Si el ticket mediano sube pero las unidades bajan, significa que vendemos productos más caros (más margen, menos merma logística).
 """)
 
+
+# ==========================================
+# 📈 CALCULADORA DE IMPACTO (EL PORQUÉ DEL 8%)
+# ==========================================
+with st.expander("Potencial de crecimiento"):
+    # Valores basados en tu gráfico
+    ticket_medio_actual = 240
+    aumento_propuesto = 20
+    ticket_objetivo = ticket_medio_actual + aumento_propuesto
+
+    # Cálculo del porcentaje de crecimiento del ticket
+    # (20 / 240) * 100 = 8.33%
+    porcentaje_crecimiento = (aumento_propuesto / ticket_medio_actual) * 100
+
+    st.write(
+        f"### ¿Por qué decimos que la facturación subiría un {porcentaje_crecimiento:.1f}%?")
+
+    st.write(f"**Ticket Medio Actual:** {ticket_medio_actual}€")
+    st.write(f"**Nuevo Ticket:** {ticket_objetivo}€")
+
+    st.info(
+        f"Subir solo **20€** en cada pedido de tus 1.366 clientes genera un impacto directo del **{porcentaje_crecimiento:.1f}%** en el total de ventas.")
+
+
 st.divider()
-st.header("II. Retención y Fidelidad")
 
+# ==========================================
+# 🔄 ANÁLISIS DE RETENCIÓN MENSUAL (MES A MES)
+# ==========================================
+st.subheader("Fidelidad Mes a Mes")
 
-clientes_2025 = df_areas[df_areas['Euros 2025'] > 0]
-num_clientes_25 = len(clientes_2025)
+# 1. Preparar datos de facturación
+df_facturacion_zonas['Mes_Año'] = df_facturacion_zonas['Fecha'].dt.to_period(
+    'M')
 
-# Clientes que compraron en 2024
-clientes_2024 = df_areas[df_areas['Euros 2024'] > 0]
-num_clientes_24 = len(clientes_2024)
+# 2. Obtener lista de clientes únicos por cada mes
+clientes_por_mes = df_facturacion_zonas.groupby(
+    'Mes_Año')['Código cliente'].unique()
 
-# Tasa de Retención: (Compraron en 24 Y en 25) / Compraron en 24
-recurrentes = df_areas[(df_areas['Euros 2024'] > 0) &
-                       (df_areas['Euros 2025'] > 0)]
-tasa_retencion = (len(recurrentes) / num_clientes_24 *
-                  100) if num_clientes_24 > 0 else 0
+# 3. Calcular la retención entre los dos últimos meses cerrados
+# Tomamos el último mes y el anterior
+meses_disponibles = sorted(clientes_por_mes.index.tolist())
 
-# Clientes Nuevos 2025: (Compraron en 25 pero no en 24 ni 23)
-nuevos_25 = df_areas[(df_areas['Euros 2025'] > 0) & (
-    df_areas['Euros 2024'] <= 0) & (df_areas['Euros 2023'] <= 0)]
-num_nuevos = len(nuevos_25)
+if len(meses_disponibles) >= 2:
+    ultimo_mes = meses_disponibles[-1]
+    mes_anterior = meses_disponibles[-2]
 
-# Ticket Medio Histórico 2025 (Basado en df_areas)
-ticket_medio_25 = clientes_2025['Euros 2025'].mean(
-) if num_clientes_25 > 0 else 0
+    set_clientes_ultimo = set(clientes_por_mes[ultimo_mes])
+    set_clientes_anterior = set(clientes_por_mes[mes_anterior])
 
-# --- BLOQUE NUEVO: KPIs DE CLIENTES ---
+    # Clientes que compraron en AMBOS meses
+    clientes_fieles_mes = set_clientes_ultimo.intersection(
+        set_clientes_anterior)
 
-# st.markdown("######     Indicadores Clave de Rendimiento")
-k1, k2, k3 = st.columns(3)
+    tasa_retencion_mensual = (
+        len(clientes_fieles_mes) / len(set_clientes_anterior)) * 100
 
-# KPI 1: Tasa de Retención
-k1.metric(
-    label="Tasa de Retención",
-    value=f"{tasa_retencion:.1f}%",
-    delta=f"{len(recurrentes)} Clientes Fieles",
-    help="Porcentaje de clientes de 2024 que han vuelto a comprar en 2025."
-)
+    # Mostrar el KPI Mensual
+    col_m1, col_m2 = st.columns(2)
 
-# KPI 2: Captación de Nuevos
-k2.metric(
-    label="Nuevos Clientes 2025",
-    value=num_nuevos,
-    delta=f"{(num_nuevos/num_clientes_25*100):.1f}% del total" if num_clientes_25 > 0 else "0%",
-    delta_color="normal"
-)
+    col_m1.metric(
+        label=f"Retención {mes_anterior} | {ultimo_mes}",
+        value=f"{tasa_retencion_mensual:.1f}%",
+        delta=f"{len(clientes_fieles_mes)} Clientes Repitieron",
+        help="Porcentaje de clientes del mes pasado que han vuelto a comprar este mes."
+    )
 
-fantasmas = len(df_areas[df_areas.apply(
-    lambda x: x['Euros 2023']+x['Euros 2024']+x['Euros 2025'] <= 0, axis=1)])
-k3.metric(
-    label="Clientes Inactivos",
-    value=f"{fantasmas} clientes",
-    delta="Oportunidad perdida",
-    delta_color="inverse"
-)
+    col_m2.metric(
+        label="Clientes Fugados (Churn)",
+        value=len(set_clientes_anterior) - len(clientes_fieles_mes),
+        delta="Revisar urgencia",
+        delta_color="inverse",
+        help="Clientes que compraron el mes pasado pero no han comprado en este."
+    )
+else:
+    st.info("Faltan datos históricos mensuales para calcular la retención.")
+
+    ###############
 
 
 df_fidelidad = df_areas.copy()
@@ -505,80 +510,9 @@ with col2:
         # fondo de todo el canvas
     )
 
-    # Mostrar en Streamlit
+    # Mostrar en Streamlit)
     st.plotly_chart(fig_bar, width='stretch')
 
-# --- FASE 2: RENTABILIDAD --
-st.divider()
-st.subheader("Tasa de Retención Mensual (Fidelidad Real)")
-
-# 1. Preparar datos (Clientes únicos por mes)
-
-df_fase1['Mes_Año'] = df_fase1['Fecha'].dt.to_period('M')
-clientes_por_mes = df_fase1.groupby(
-    'Mes_Año')['Código cliente'].apply(set).reset_index()
-
-retencion_mensual = []
-for i in range(len(clientes_por_mes) - 1):
-    clientes_actual = clientes_por_mes.iloc[i]['Código cliente']
-    clientes_siguiente = clientes_por_mes.iloc[i+1]['Código cliente']
-
-    recurrentes = clientes_actual.intersection(clientes_siguiente)
-    tasa = (len(recurrentes) / len(clientes_actual)) * \
-        100 if len(clientes_actual) > 0 else 0
-
-    retencion_mensual.append({
-        # Convertimos a timestamp para el eje X
-        'Mes': clientes_por_mes.iloc[i+1]['Mes_Año'].to_timestamp(),
-        'Tasa_Retencion': tasa
-    })
-
-df_retencion = pd.DataFrame(retencion_mensual)
-
-# 2. Crear Gráfico
-fig_ret = px.line(
-    df_retencion, x='Mes', y='Tasa_Retencion',
-    markers=True, line_shape='spline',
-    color_discrete_sequence=['#15F2A8']
-)
-
-# --- AÑADIR SHADOWS ANUALES ---
-start_year = df_retencion['Mes'].min().year
-end_year = df_retencion['Mes'].max().year
-
-for year in range(start_year, end_year + 1):
-    # Usamos colores sutiles para no tapar la línea verde
-    color_shadow = "rgba(100, 149, 237, 0.04)" if year % 2 == 0 else "rgba(255, 255, 255, 0.02)"
-
-    fig_ret.add_vrect(
-        x0=f"{year}-01-01", x1=f"{year}-12-31",
-        fillcolor=color_shadow, layer="below", line_width=0,
-        annotation_text=str(year), annotation_position="top left",
-        annotation_font=dict(color="rgba(255,255,255,0.3)")
-    )
-
-# 3. Estética final
-fig_ret.update_layout(
-    template="plotly_dark",
-    yaxis=dict(title="Retención (%)", range=[0, 110], showgrid=False),
-    xaxis=dict(title="", showgrid=False),
-    height=450
-)
-
-st.plotly_chart(fig_ret, use_container_width=True)
-
-# --- COLOCAR JUSTO DEBAJO DEL st.plotly_chart(fig_ret) ---
-
-st.info(f"""
-**Cómo leer este gráfico de Fidelidad Mensual:**
-
-* **¿Qué mide?**: El porcentaje de clientes que compraron el mes pasado y han vuelto a comprar en el mes actual. Es el mejor indicador de la **salud real** del negocio.
-* **La Línea Verde**: Representa la consistencia. Si se mantiene alta (ej. >80%), significa que tienes una base de clientes cautiva muy sólida.
-* **Las Sombras (Shadows)**: Separan los años. Permiten ver si la retención cae siempre en las mismas fechas (como agosto o periodos vacacionales).
-* **Interpretación**: 
-    * **Subida**: Estamos fidelizando mejor a los nuevos clientes.
-    * **Bajada**: Alerta. Los clientes están probando el producto pero no regresan. Es momento de revisar calidad o servicio.
-""")
 
 st.divider()
 st.subheader("Análisis de Pareto: Concentración de Clientes")
@@ -628,7 +562,7 @@ try:
         margin=dict(l=20, r=20, t=40, b=20)
     )
 
-    st.plotly_chart(fig_pareto, use_container_width=True)
+    st.plotly_chart(fig_pareto, width='stretch')
 
     # 4. KPI de Interpretación
     v20 = df_pareto[df_pareto['Clientes_Acum_Perc']
@@ -646,7 +580,20 @@ except Exception as e:
     st.error(
         f"Error: Asegúrate de que el DataFrame contiene la columna 'Código cliente'. Detalle: {e}")
 
-st.subheader("Nuestros 10 Clientes 'Imprescindibles'")
+    # ==========================================
+# 💡 ESTRATEGIA PARA EL GRUPO B y C (El 80% de clientes)
+# ==========================================
+with st.expander("Recomendación Estratégica: Optimización del 77%"):
+    st.markdown("""
+    ### Objetivo: Maximizar la Eficiencia Operativa
+    Para los clientes que generan el 23% de la facturación, el enfoque no es el crecimiento agresivo, sino la **rentabilidad por ahorro de tiempo**:
+    
+    1. **Estandarización de Pedidos:** Crear "Cestas Tipo" para estos clientes. Que no pierdan (ni nos hagan perder) tiempo eligiendo; que repitan su pedido habitual con un solo click.
+    2. **Optimización Logística:** Agrupar las entregas de estos clientes en días específicos de la semana para que el camión siempre vaya lleno y la ruta sea circular.
+    3. **Autogestión:** Fomentar que el pedido entre directamente por la App/Web sin llamadas telefónicas. Esto libera a tu equipo administrativo para cuidar al 20% de clientes VIP.
+    4. **Umbral de Rentabilidad:** Revisar si los pedidos de menos de X euros cubren el coste de transporte. Si no es así, proponer entregas quincenales en lugar de semanales.
+    """)
+    st.info("*La rentabilidad no solo viene de vender más, sino de que atender al cliente pequeño no nos cueste dinero.*")
 
 # 1. Preparamos los datos
 top_10_clientes = df_pareto.head(10).copy()
@@ -661,20 +608,19 @@ top_10_clientes['Código cliente'] = top_10_clientes['Código cliente'].fillna(
     'Venta No Identificada')
 
 # 4. Lo mostramos en el expander
-with st.expander("Nuestros clientes VIP", expanded=False):
+with st.expander("Nuestros 10 Clientes 'Imprescindibles'", expanded=False):
     st.table(top_10_clientes[['Código cliente', 'Importe_Euros']])
 
+    st.warning(f"""
+    El **Cliente 2117** es el motor de la fábrica, pero eso nos pone en una situación delicada: **si ellos dejan de comprar, el negocio sufre un golpe durísimo de la noche a la mañana.**
 
-st.warning(f"""
-El **Cliente 2117** es el motor de la fábrica, pero eso nos pone en una situación delicada: **si ellos dejan de comprar, el negocio sufre un golpe durísimo de la noche a la mañana.**
+    **Recomendación:**
 
-**¿Qué te sugiero como estrategia para este año?**
+    1.  **Mima al Gigante, pero busca hermanos:** No dejes de cuidar al Cliente 2117, pero nuestra prioridad debería ser captar otros 2 o 3 clientes de ese perfil para repartir el peso de la facturación.
+    2.  **Ponle cara a los 'desconocidos':** Tenemos **350.000 €** en ventas (el grupo 'Venta No Identificada') que no sabemos quiénes son. Es fundamental investigar de dónde vienen esas ventas para ver si podemos convertir a esos clientes anónimos en clientes VIP identificados.
+    3.  **Diversificar es ganar salud:** Cuantos más clientes medianos tengamos menos poder tendrá un solo cliente sobre el futuro de tu panadería.
 
-1.  **Mima al Gigante, pero busca hermanos:** No dejes de cuidar al Cliente 2117, pero nuestra prioridad debería ser captar otros 2 o 3 clientes de ese perfil para repartir el peso de la facturación.
-2.  **Ponle cara a los 'desconocidos':** Tenemos **350.000 €** en ventas (el grupo 'Venta No Identificada') que no sabemos quiénes son. Es fundamental investigar de dónde vienen esas ventas para ver si podemos convertir a esos clientes anónimos en clientes VIP identificados.
-3.  **Diversificar es ganar salud:** Cuantos más clientes medianos tengamos menos poder tendrá un solo cliente sobre el futuro de tu panadería.
-
-""")
+    """)
 
 st.divider()
 
@@ -749,15 +695,54 @@ if not df_audit.empty:
         margin=dict(l=20, r=20, t=40, b=20)
     )
 
-    st.plotly_chart(fig_tend, use_container_width=True)
+    st.plotly_chart(fig_tend, width='stretch')
 
 
 else:
     st.warning(
         f"No se han encontrado datos para el cliente {int(id_cliente_audit)}. Verifica si el código es correcto en la tabla superior.")
 
+# ==========================================
+# ✅ FICHA DE SEGUIMIENTO ESTRATÉGICO (CORREGIDA)
+# ==========================================
+
+# 1. Detectamos cómo se llama tu columna de dinero (Euros, Importe, etc.)
+# Buscamos una columna que se llame 'Euros' o 'Importe' o la primera numérica que no sea el ID
+posibles_nombres = ['Euros', 'Importe', 'Ventas', 'Total']
+col_dinero = next((c for c in posibles_nombres if c in df_audit.columns),
+                  df_audit.select_dtypes(include=['number']).columns[-1])
+
+# 2. Ahora sí, calculamos con el nombre real
+fact_cliente = df_audit[col_dinero].sum()
+fact_total_empresa = df_p[col_dinero].sum()
+
+st.subheader(f"Análisis Operativo: Cliente {id_cliente_audit}")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.write("**Estado de Actividad**")
+    st.write("🟢 Activo")
+
+with col2:
+    st.write("**Peso en el Negocio**")
+    if fact_total_empresa > 0:
+        peso = (fact_cliente / fact_total_empresa) * 100
+        st.write("Relevancia:", f"{peso:.2f}%")
+    else:
+        st.write("Calculando...")
+
+with col3:
+    st.write("**Acción Recomendada**")
+    if fact_cliente > 50000:
+        st.info("Prioridad en Logística")
+    else:
+        st.write("Mantener frecuencia estándar")
+
+
+st.divider()
 # --- SECCIÓN 2: OPTIMIZACIÓN DEL MARGEN Y RENTABILIDAD ---
-st.header("III. Matriz de Decisión")
+st.header("II. Análisis de Matriz BCG (Boston Consulting Group)")
 st.markdown("""
     ###### Productos con un **Margen > 30%**.
 """)
@@ -837,15 +822,47 @@ fig_bubble.update_layout(
 )
 fig_bubble.update_traces(marker=dict(line=dict(width=0)))
 fig_bubble.add_hline(y=0, line_dash="solid", line_color="red")
+
+
 # Renderizado ocupando todo el ancho disponible
-st.plotly_chart(fig_bubble, use_container_width=True)
+st.plotly_chart(fig_bubble, width='stretch')
 
-# --- 3. ANÁLISIS PARA TU JEFE ---
-# --- TU GRÁFICO (con los emojis ya configurados) ---
-# ... (código del scatter que ya tienes) ...
 
-# --- ESTILO DE FAJAS DIRECTAS ---
-# --- PLAN DE ACCIÓN DISCRETO EN EXPANDER ---
+with st.expander("Análisis Detallado de Márgenes y Costes (Escandallos)"):
+    st.write("### Control de Rentabilidad por Artículo")
+    st.info("Esta tabla cruza tus costes de producción con los precios de venta para asegurar que cada producto sea rentable.")
+
+    # 1. Preparar la tabla para mostrar (puedes elegir las columnas que más le importen a él)
+    # Usamos df_margen_raw que ya cargaste
+    df_mostrar_margen = df_margen_raw[[
+        'Código Artículo', 'Nombre Artículo', 'Coste Producción Unitario',
+        'Venta Neta Unitario', 'Margen Bruto Unitario', 'Margen Total Contribuido (€)'
+    ]].copy()
+
+    # 2. Añadir un semáforo visual de rentabilidad
+    # Si el margen es menor al 30%, es una alerta para el dueño
+    def resaltar_margen(val):
+        color = 'red' if val < 0.30 else 'green'
+        return f'color: {color}; font-weight: bold'
+
+    # 3. Mostrar la tabla con estilo
+    st.dataframe(
+        df_mostrar_margen.style.format({
+            'Coste Producción Unitario': '{:.2f} €',
+            'Venta Neta Unitario': '{:.2f} €',
+            'Margen Bruto Unitario': '{:.1%}',
+            'Margen Total Contribuido (€)': '{:.2f} €'
+        }).map(resaltar_margen, subset=['Margen Bruto Unitario']),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # 4. BOTÓN DE ACCIÓN: Análisis de Productos Críticos
+    productos_criticos = df_margen_raw[df_margen_raw['Margen Bruto Unitario'] < 0.25]
+    if not productos_criticos.empty:
+        st.warning(
+            f"⚠️ Atención : Tienes {len(productos_criticos)} productos con margen inferior al 25%. Deberíamos revisar sus costes o precios.")
+
 
 with st.expander("Plan de Acción"):
 
@@ -880,22 +897,10 @@ with st.expander("Plan de Acción"):
         </div>
         """, unsafe_allow_html=True)
 
-with st.expander("Listado Detallado"):
-    col_ganadores, col_revision = st.columns(2)
-    with col_ganadores:
-        st.success(" Generadores de Valor")
-        df_gan = df_final.groupby(['Código artículo', 'Nombre Artículo']).agg(
-            {'Beneficio_Real_Euros': 'sum', 'Margen Bruto Unitario': 'mean'}).nlargest(10, 'Beneficio_Real_Euros').reset_index()
-        st.dataframe(df_gan, width='stretch', hide_index=True)
-    with col_revision:
-        st.error(" En Revisión")
-        df_rev = df_final.groupby(['Código artículo', 'Nombre Artículo']).agg(
-            {'Margen Bruto Unitario': 'mean', 'Beneficio_Real_Euros': 'sum'}).nsmallest(10, 'Margen Bruto Unitario').reset_index()
-        st.dataframe(df_rev, width='stretch', hide_index=True)
 st.divider()
 
 
-st.header("IV. Optimizador de Margen (Simulador Estratégico)")
+st.header("III. Optimizador de Margen (Simulador Estratégico)")
 # 1. Selección de Producto para el Simulador
 prod_sim = st.selectbox("Seleccione un producto para simular:",
                         df_margen_raw['Nombre Artículo'].unique())
@@ -905,26 +910,37 @@ datos_orig = df_margen_raw[df_margen_raw['Nombre Artículo']
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("Margen Actual", f"{datos_orig['Margen Bruto Unitario']:.1%}")
-    coste_u = datos_orig['Coste Producción Unitario']
-    st.caption(f"Coste de producción: {coste_u:.3f}€")
+    # --- NUEVA PALANCA: Coste de Producción ---
+    coste_base = float(datos_orig['Coste Producción Unitario'])
+    # Permitimos simular variaciones de coste (desde un 50% menos hasta un 50% más)
+    nuevo_coste_u = st.slider(
+        "Ajustar Coste Producción (€)",
+        round(coste_base * 0.5, 3),
+        round(coste_base * 1.5, 3),
+        coste_base,
+        step=0.005,
+        format="%.3f"
+    )
+    st.caption(f"Coste base original: {coste_base:.3f}€")
 
 with col2:
-    # Palanca 1: El Multiplicador de Precio
+    # Palanca 2: El Multiplicador de Precio
     nuevo_mult = st.slider("Ajustar Multiplicador (Precio)", 1.0, 15.0, float(
         datos_orig['Multiplicador']), step=0.1)
-    nueva_venta_bruta = coste_u * nuevo_mult
+    # El precio bruto ahora depende del NUEVO coste
+    nueva_venta_bruta = nuevo_coste_u * nuevo_mult
 
 with col3:
-    # Palanca 2: El Descuento
+    # Palanca 3: El Descuento
     nuevo_dto = st.slider("Ajustar Descuento (%)", 0, 100, int(
         datos_orig['Descuento Porcentual'] * 100)) / 100
     nueva_venta_neta = nueva_venta_bruta * (1 - nuevo_dto)
 
-# 2. Cálculos de la Simulación
-nuevo_margen_euro = nueva_venta_neta - coste_u
+# --- RECALCULAR CON EL NUEVO COSTE ---
+nuevo_margen_euro = nueva_venta_neta - nuevo_coste_u
 nuevo_margen_porc = (nuevo_margen_euro /
                      nueva_venta_neta) if nueva_venta_neta > 0 else 0
+
 
 # 3. Mostrar Resultado del Impacto
 st.subheader("Resultado de la Simulación")
@@ -942,37 +958,42 @@ res2.metric("Nuevo Margen %", f"{nuevo_margen_porc:.1%}",
 
 res3.metric("Margen por Unidad (€)", f"{nuevo_margen_euro:.3f} €")
 
-# 4. Consejo Estratégico automático
-if nuevo_margen_porc < 0.1:
-    st.error(
-        f"Atención: Con estos ajustes, el margen sigue por debajo del objetivo del 10%. Se recomienda subir el multiplicador a más de {(0.3 + (coste_u/(nueva_venta_bruta*(1-nuevo_dto)) if nueva_venta_bruta > 0 else 0)):.1f}")
-else:
-    st.success(
-        "Objetivo alcanzado: Este ajuste sitúa al producto en la zona de alta rentabilidad.")
-
 
 st.divider()
 
 # Cargar los datos
 df_rec = pd.read_excel('recomendation.xlsx')
 
-st.header("V. Estrategias de Venta Cruzada")
+st.header("IV. Estrategias de Venta Cruzada (Smart Bundles)")
 
-# Filtro para que el usuario busque un producto
-producto = st.selectbox("Selecciona un producto:",
-                        df_rec['Producto_1'].unique())
+# 1. Selector de producto (usa la columna Producto_1 de tu Excel)
+producto_sel = st.selectbox("Si el cliente compra:",
+                            df_rec['Producto_1'].unique())
 
-# Filtrar y mostrar
-resultado = df_rec[df_rec['Producto_1'] == producto]
-st.dataframe(resultado[['Producto_2', 'Correlacion',
-             'Recomendacion_Comercial']], hide_index=True)
+# 2. Filtrado (cogemos los mejores del Excel)
+resultado = df_rec[df_rec['Producto_1'] == producto_sel].sort_values(
+    'Correlacion', ascending=False).head(3)
 
-st.info("""La correlación mide la fuerza de la relación entre dos productos. 
-        Cuanto más próximo sea el valor a **1**, mayor es la probabilidad de que se compren juntos.""")
+st.markdown(f"### Recomendaciones para aumentar el ticket")
+
+if not resultado.empty:
+    cols = st.columns(len(resultado))
+    for i, (index, row) in enumerate(resultado.iterrows()):
+        with cols[i]:
+            with st.container(border=True):
+                st.caption("✅ Producto Sugerido")
+                st.subheader(row['Producto_2'])
+                # Barra de probabilidad basada en la columna Correlacion
+                st.progress(float(row['Correlacion']),
+                            text=f"Aceptación: {row['Correlacion']:.1%}")
+                st.markdown("**Argumento de Venta:**")
+                st.info(f"{row['Recomendacion_Comercial']}")
+else:
+    st.warning("No hay asociaciones detectadas para este producto en el Excel.")
+
 st.divider()
 
-
-st.header("VI. Smart Bakery App: Motor de Inteligencia Predictiva")
+st.header("V. Smart Bakery App: Motor de Inteligencia Predictiva")
 
 st.markdown("""
     Para garantizar que el modelo de Machine Learning aporte el máximo valor operativo, he aplicado un **filtro de viabilidad**:
@@ -1227,7 +1248,7 @@ try:
 
             fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.05)")
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
             with st.expander(f"Ver desglose de previsiones"):
                 df_futuro_solo = df_proj.iloc[1:].copy()
@@ -1239,7 +1260,7 @@ try:
                 st.dataframe(
                     df_futuro_solo[['Mes', 'Previsto (Media)']],
                     hide_index=True,
-                    use_container_width=True
+                    width='content'
                 )
 
 except Exception as e:
@@ -1248,109 +1269,160 @@ except Exception as e:
 # --- SECCIÓN FINAL: CONCLUSIONES ESTRATÉGICAS ---
 
 
-st.subheader(
-    f"Validación Real: ¿Qué pasó en Enero con el producto {productos_dict[id_sel]}?")
+# --- CONFIGURACIÓN DE RUTAS SEGURAS ---
+# Esto detecta automáticamente dónde está tu script y busca los archivos allí mismo
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PATH_FEEDBACK = os.path.join(BASE_DIR, "registro_feedback_smart_bakery.csv")
 
-# ===============================
-# 1️⃣ Diccionario
-# ===============================
 
+def registrar_feedback_local(id_prod, nombre_prod, pred, real, valoracion):
+    try:
+        ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        nuevo_fb = pd.DataFrame([{
+            "Timestamp": ahora,
+            "ID_Articulo": id_prod,
+            "Nombre": nombre_prod,
+            "Prediccion_IA": round(pred, 2),
+            "Venta_Real": real,
+            "Feedback_Usuario": valoracion
+        }])
+
+        # Guardar usando la ruta segura PATH_FEEDBACK
+        if not os.path.isfile(PATH_FEEDBACK):
+            nuevo_fb.to_csv(PATH_FEEDBACK, index=False, sep=";")
+        else:
+            nuevo_fb.to_csv(PATH_FEEDBACK, mode='a',
+                            index=False, sep=";", header=False)
+        st.toast(f"Feedback '{valoracion}' guardado!", icon="💾")
+    except Exception as e:
+        st.error(f"Error al guardar: {e}")
+
+
+# ==========================================
+# 1️⃣ DICCIONARIS DE VENDES REALS
+# ==========================================
 ventas_reales_enero = {
-    "101": 993, "131": 1470, "120": 633, "6": 400,
-    "105": 301, "30": 533, "3": 310, "1121": 1176,
-    "113": 332, "9": 486, "300": 334, "1123": 251,
-    "103": 318, "303": 191, "330": 524, "1144": 229,
-    "1141": 436, "124": 237, "1010": 222, "7": 124,
-    "1122": 221, "4": 54, "36": 81, "31": 77,
-    "1011": 171, "0000": 99, "402": 176, "410": 118,
-    "1604": 215, "35": 55, "403": 182, "17": 18,
-    "309": 85, "1310": 96, "140": 65, "404": 171,
-    "138": 124, "161": 100, "331": 89, "1125": 49,
-    "1001": 186, "405": 85, "1802": 152, "1013": 92,
-    "2027": 44, "106": 94, "8": 134, "1134": 561,
-    "107": 70, "401": 47, "25": 41, "142": 83,
-    "1605": 94, "110": 64, "19": 35, "22": 53,
-    "1309": 56, "1021": 63, "1016": 49, "321": 67,
-    "1132": 128, "1114": 52, "818": 25, "604": 1,
-    "1014": 37, "118": 25, "37": 28, "515": 20,
-    "156": 41, "817": 5, "38": 25, "23": 11,
-    "15": 34, "1308": 50, "1018": 32, "200": 53,
-    "137": 59, "815": 9, "1112": 42, "100": 14,
-    "308": 32, "332": 16, "210": 31, "307": 48,
-    "700": 17, "181": 17, "114": 16, "1501": 39,
-    "521": 11, "1314": 20, "314": 17, "108": 31,
-    "517": 3, "202": 26, "333": 8, "104": 13,
-    "516": 4, "201": 12, "208": 12, "518": 17,
-    "313": 15, "1315": 15, "1316": 7, "816": 4,
-    "522": 4, "502": 2, "1509": 22, "1508": 28,
-    "820": 1, "1505": 6, "1500": 11, "1504": 4,
-    "150": 9, "1313": 3, "1494": 4, "1507": 5,
-    "315": 2, "211": 9, "350": 119, "351": 37,
-    "334": 6, "326": 16, "324": 93, "323": 14,
-    "327": 20, "0325": 91, "322": 69, "514": 2,
-    "170": 1, "1606": -1, "IN400": 1,
-    "26": 38, "28": 157
+    "101": 993, "131": 1470, "120": 633, "6": 400, "105": 301, "30": 533, "3": 310, "1121": 1176,
+    "113": 332, "9": 486, "300": 334, "1123": 251, "103": 318, "303": 191, "330": 524, "1144": 229,
+    "1141": 436, "124": 237, "1010": 222, "7": 124, "1122": 221, "4": 54, "36": 81, "31": 77,
+    "1011": 171, "0000": 99, "402": 176, "410": 118, "1604": 215, "35": 55, "403": 182, "17": 18,
+    "309": 85, "1310": 96, "140": 65, "404": 171, "138": 124, "161": 100, "331": 89, "1125": 49,
+    "1001": 186, "405": 85, "1802": 152, "1013": 92, "2027": 44, "106": 94, "8": 134, "1134": 561,
+    "107": 70, "401": 47, "25": 41, "142": 83, "1605": 94, "110": 64, "19": 35, "22": 53,
+    "1309": 56, "1021": 63, "1016": 49, "321": 67, "1132": 128, "1114": 52, "818": 25, "604": 1,
+    "1014": 37, "118": 25, "37": 28, "515": 20, "156": 41, "817": 5, "38": 25, "23": 11,
+    "15": 34, "1308": 50, "1018": 32, "200": 53, "137": 59, "815": 9, "1112": 42, "100": 14,
+    "308": 32, "332": 16, "210": 31, "307": 48, "700": 17, "181": 17, "114": 16, "1501": 39,
+    "521": 11, "1314": 20, "314": 17, "108": 31, "517": 3, "202": 26, "333": 8, "104": 13,
+    "516": 4, "201": 12, "208": 12, "518": 17, "313": 15, "1315": 15, "1316": 7, "816": 4,
+    "522": 4, "502": 2, "1509": 22, "1508": 28, "820": 1, "1505": 6, "1500": 11, "1504": 4,
+    "150": 9, "1313": 3, "1494": 4, "1507": 5, "315": 2, "211": 9, "350": 119, "351": 37,
+    "334": 6, "326": 16, "324": 93, "323": 14, "327": 20, "0325": 91, "322": 69, "514": 2,
+    "17": 1, "1606": -1, "IN400": 1, "26": 38, "28": 157
 }
 
-# ===============================
-# 2️⃣ Limpiamos ID seleccionado (SIEMPRE STRING)
-# ===============================
+ventas_reales_febrero = {
+    "131": 1716, "1121": 1356, "330": 1292, "0": 1077, "101": 1062, "120": 648, "1141": 618,
+    "9": 582, "30": 515, "5136": 480, "113": 412, "6": 398, "331": 342, "1134": 332, "300": 317,
+    "103": 315, "3": 312, "105": 306, "1123": 284, "1604": 269, "124": 265, "1001": 261,
+    "1010": 229, "1144": 222, "1122": 217, "303": 189, "402": 172, "1011": 164, "8": 157,
+    "1802": 157, "29": 156, "403": 145, "7": 143, "1605": 143, "404": 127, "1132": 127,
+    "350": 114, "138": 113, "332": 110, "324": 104, "1013": 102, "161": 101, "0000": 100,
+    "1310": 100, "405": 91, "28": 89, "36": 85, "106": 82, "142": 81, "309": 79, "325": 79,
+    "107": 74, "110": 74, "321": 74, "1021": 73, "31": 72, "140": 72, "410": 68, "518": 67,
+    "1125": 59, "156": 58, "22": 56, "1016": 56, "18": 55, "1308": 54, "351": 53, "1309": 53,
+    "26": 50, "333": 50, "137": 49, "35": 47, "4": 46, "200": 46, "1501": 46, "308": 42,
+    "2027": 40, "307": 39, "401": 39, "605": 39, "210": 38, "25": 36, "1114": 34, "17": 33,
+    "19": 33, "108": 33, "37": 32, "1018": 31, "322": 30, "334": 30, "15": 29, "38": 29,
+    "1014": 27, "100": 25, "208": 25, "181": 23, "604": 23, "700": 23, "326": 21, "314": 20,
+    "1112": 19, "114": 18, "327": 18, "1314": 18, "118": 17, "323": 17, "211": 16, "104": 14,
+    "313": 13, "361": 13, "515": 13, "12": 12, "150": 11, "362": 10, "1509": 10, "23": 9,
+    "201": 9, "202": 8, "517": 8, "521": 8, "1316": 8, "1500": 8, "1508": 8, "315": 6,
+    "522": 6, "516": 5, "1315": 5, "502": 3, "519": 3, "1505": 3, "1507": 3, "14": 2,
+    "514": 2, "523": 2, "1504": 2, "IN400": 2, "406": 1, "535": 1, "1313": 1, "1494": 1, "IN409": 1
+}
 
+# ==========================================
+# 2️⃣ SELECTOR DE MES (CORREGIDO)
+# ==========================================
+opciones_mes = ["Enero de 2026", "Febrero de 2026"]
+mes_validacion = st.selectbox("Selecciona mes para validar:", opciones_mes)
+
+# Lógica de asignación limpia
+if mes_validacion == "Enero de 2026":
+    diccionario_actual = ventas_reales_enero
+    nombre_mes_real = "Venta Real Enero 2026"
+    fila_idx = 0  # Primera fila de la predicción
+else:
+    diccionario_actual = ventas_reales_febrero
+    nombre_mes_real = "Venta Real Febrero 2026"
+    fila_idx = 1  # Segunda fila de la predicción
+
+st.subheader(f"Validación Real: {mes_validacion}")
+
+# ==========================================
+# 3️⃣ LIMPIEZA DE CÓDIGO (SENSE 0 INICIAL)
+# ==========================================
 try:
-    id_limpio = str(id_sel).strip()
+    # Convertimos a string, quitamos espacios y ceros a la izquierda
+    id_limpio = str(id_sel).strip().lstrip('0')
+    if id_limpio == "":
+        id_limpio = "0"
 except:
     st.error("Error leyendo el código seleccionado.")
     st.stop()
 
-# ===============================
-# 3️⃣ Validación real
-# ===============================
-if id_limpio in ventas_reales_enero:
+# ==========================================
+# 4️⃣ VALIDACIÓN Y COMPARATIVA
+# ==========================================
+if id_limpio in diccionario_actual:
+    # Verificamos que df_proj exista y tenga datos
+    if 'df_proj' in locals() and not df_proj.empty:
+        try:
+            # Intentamos sacar la predicción de la fila correspondiente
+            pred_ia = float(df_proj["Cantidad_Unidades"].iloc[fila_idx])
+            real_dato = diccionario_actual[id_limpio]
 
-    if 'df_proj' in locals() and len(df_proj) > 1:
+            diferencia = pred_ia - real_dato
+            porcentaje_brecha = (diferencia / real_dato) * \
+                100 if real_dato != 0 else 0
 
-        pred_ia = float(df_proj["Cantidad_Unidades"].iloc[1])
-        real_alberto = ventas_reales_enero[id_limpio]
-        diferencia = pred_ia - real_alberto
+            # --- VISUALIZACIÓN ---
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Predicción IA", f"{pred_ia:.0f} unidades")
+            with c2:
+                st.metric(nombre_mes_real, f"{real_dato:.0f} unidades")
+            with c3:
+                # Delta inverso: si la IA predice de MÁS, es un aviso (rojo), si es de MENOS (verde/normal)
+                st.metric("Desviación (Error)",
+                          f"{diferencia:.0f} unidades",
+                          delta=f"{porcentaje_brecha:.1f}%",
+                          delta_color="inverse" if abs(porcentaje_brecha) > 15 else "normal")
 
-        # Cálculo del porcentaje de brecha (evitando división por cero)
-        porcentaje_brecha = (diferencia / real_alberto) * \
-            100 if real_alberto != 0 else 0
+            # Tabla resumen elegante
+            df_comp = pd.DataFrame([{
+                "Producto": productos_dict[id_sel],
+                "Mes": mes_validacion,
+                "Predicción": f"{pred_ia:.0f}",
+                "Real": f"{real_dato}",
+                "Diferencia": f"{diferencia:.0f}",
+                "Precisión": f"{100 - abs(porcentaje_brecha):.1f}%"
+            }])
+            st.table(df_comp)
 
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            st.metric("Predicción Smart Bakery", f"{pred_ia:.0f} unidades")
-
-        with c2:
-            st.metric("Venta Real Enero 2026", f"{real_alberto:.0f} unidades")
-
-        with c3:
-            # Mostramos el porcentaje en el delta
-            st.metric(
-                "Brecha de Demanda",
-                f"{diferencia:.0f} unidades",
-                delta=f"{porcentaje_brecha:.1f}% vs Real",
-                delta_color="inverse" if diferencia > 0 else "normal"
-            )
-
-        # Tabla resumen con la columna de porcentaje
-        st.table(pd.DataFrame([{
-            "Código": id_limpio,
-            "Demanda IA": f"{pred_ia:.0f}",
-            "Venta Real": f"{real_alberto}",
-            "Diferencia": f"{diferencia:.0f}",
-            "Impacto (%)": f"{porcentaje_brecha:.1f}%"
-        }]))
-
+        except Exception as e:
+            st.warning(
+                f"Nota: No hay fila de predicción suficiente en el modelo para {mes_validacion}.")
     else:
-        st.warning("No hay proyección disponible (df_proj vacío).")
+        st.warning("Primero genera la proyección en la sección anterior.")
 else:
-    st.warning(f"El código {id_limpio} no tiene registro en Enero 2026.")
+    st.info(
+        f"El producto {id_limpio} no tuvo ventas reales registradas en {mes_validacion}.")
 
 # --- SECCIÓN: ACCESO A DATOS (RAW DATA) ---
 st.markdown("---")
-st.header("VII. Centro de Datos (Raw Data) y Información Clave para la IA")
+st.header("VI. Centro de Datos (Raw Data) y Información Clave para la IA")
 
 with st.expander("Inspeccionar tablas de análisis y entrenamiento"):
     tab1, tab2, tab3 = st.tabs([
@@ -1376,7 +1448,7 @@ with st.expander("Inspeccionar tablas de análisis y entrenamiento"):
         cols_reales = [c for c in cols_interes if c in df_vis_ventas.columns]
 
         st.dataframe(df_vis_ventas[cols_reales],
-                     use_container_width=True, hide_index=True)
+                     width='content', hide_index=True)
 
     with tab2:
         st.subheader("Datos Procesados para Random Forest")
@@ -1389,7 +1461,7 @@ with st.expander("Inspeccionar tablas de análisis y entrenamiento"):
             df_vis_train['Fecha'] = pd.to_datetime(
                 df_vis_train['Fecha']).dt.strftime('%B %Y')
 
-            st.dataframe(df_vis_train, use_container_width=True,
+            st.dataframe(df_vis_train, width='content',
                          hide_index=True)
         else:
             st.warning(
@@ -1398,7 +1470,7 @@ with st.expander("Inspeccionar tablas de análisis y entrenamiento"):
     with tab3:
         st.subheader("Consolidado de Métricas")
         if 'df_resumen' in locals() or 'df_resumen' in globals():
-            st.dataframe(df_resumen, use_container_width=True, hide_index=True)
+            st.dataframe(df_resumen, width='content', hide_index=True)
         else:
             st.info("El resumen se generará al procesar todos los productos.")
 
@@ -1429,66 +1501,80 @@ with col_exp2:
 st.divider()
 
 
-# Creamos un diccionario con todas las tablas clave de tu proyecto
-tablas_proyecto = {
-    # El Excel de Alberto tal cual
-    "1. Raw Data (Original)": df_final,
-    # Tras quitar nulos y corregir IDs
-    "2. Data Cleaned (Limpio)": df_margen_raw,
-    # La tabla que mostraste con Lag_1, Lag_2...
-    "3. Features (Lags)": df_areas,
-    # Variables de entrada para la IA
-    "5. Predictions (Output)": df_proj            # El resultado final de la IA
-}
+# ==========================================
+# 1. RECUPERAR LOS DATOS DE LA FUNCIÓN
+# ==========================================
+# Asegúrate de que este orden coincide exactamente con tu 'return'
+df_facturacion_zonas, df_final, df_margen_raw, df_a = load_data()
+
+# ==========================================
+# 2. LÓGICA DEL CAMIÓN INTELIGENTE
+# ==========================================
+st.header("VII. Módulo de Logística Inteligente")
+
+st.markdown("""
+### ¿Es rentable enviar el camión hoy?
+Este sistema calcula si el **beneficio neto** de los pedidos de una zona 
+cubre los costes de envío (gasoil, chófer y mantenimiento).
+""")
+
+# Calculamos el margen promedio de la fábrica para saber cuánto ganamos por euro vendido
+# Usamos la columna que ya limpiamos en tu función
+margen_medio = df_margen_raw['Margen Bruto Unitario'].mean()
+
+# Agrupamos la facturación por zona
+resumen_logistica = df_facturacion_zonas.groupby('Zona').agg({
+    'Importe_Euros': 'sum'
+}).reset_index()
+
+# Calculamos el beneficio estimado (Ventas * Margen)
+resumen_logistica['Beneficio_Estimado'] = resumen_logistica['Importe_Euros'] * margen_medio
+
+# --- INTERFAZ PARA --
+col1, col2 = st.columns([1, 2])
+
+with col1:
+    # Slider  ajuste el coste real de mover un camión
+    coste_camion = st.slider(
+        "Coste fijo por ruta (€):",
+        min_value=50,
+        max_value=500,
+        value=150,
+        help="Gasoil + Chófer + Amortización del camión"
+    )
+
+# Calculamos el ROI (Dinero que queda tras pagar el camión)
+resumen_logistica['Resultado_Neto'] = resumen_logistica['Beneficio_Estimado'] - coste_camion
+
+# Función del semáforo para la decisión automática
 
 
-# st.header("VIII. Centro de Control")
-
-# # El botón de subida
-# uploaded_file = st.file_uploader(
-#     "", type=['csv', 'xlsx'])
-
-# if uploaded_file is not None:
-#     # Si Alberto sube un archivo, la App lo lee
-#     if uploaded_file.name.endswith('.csv'):
-#         df_final = pd.read_csv(uploaded_file)
-#     else:
-#         df_final = pd.read_excel(uploaded_file)
-
-#     st.success("✅ Datos cargados correctamente. ¡Smart Bakery está listo!")
-
-#     # AQUÍ IRÍA EL RESTO DE TU CÓDIGO (EL MODELO, LOS GRÁFICOS, ETC.)
-#     # ...
-# else:
-#     st.info("Por favor, sube un archivo para comenzar el análisis.")
+def alerta_logistica(resultado):
+    if resultado > 200:
+        return "🟢 Ruta rentable"
+    if resultado > 0:
+        return "🟡 Margen justo"
+    return "🔴 Agrupar pedido"
 
 
-# # El Gran Final
-# if st.button("Finalizar Presentación Estratégica"):
-#     st.balloons()
-#     st.snow()  # Un toque extra para que parezca confeti cayendo
+resumen_logistica['Decisión IA'] = resumen_logistica['Resultado_Neto'].apply(
+    alerta_logistica)
+
+# Ordenamos para que vea primero donde pierde dinero (lo que hay que automatizar)
+resumen_logistica = resumen_logistica.sort_values(
+    by='Resultado_Neto', ascending=True)
+
+# --- MOSTRAR TABLA ---
+st.dataframe(
+    resumen_logistica[['Zona', 'Importe_Euros',
+                       'Beneficio_Estimado', 'Resultado_Neto', 'Decisión IA']],
+    use_container_width=True,
+    hide_index=True
+)
 
 
-# st.header("Auditoría de Estructura de Datos")
+st.divider()
 
-# for nombre, df in tablas_proyecto.items():
-#     with st.expander(f"Ver estructura de: {nombre}"):
-#         col1, col2, col3 = st.columns(3)
-#         col1.metric("Filas", df.shape[0])
-#         col2.metric("Columnas", df.shape[1])
-#         col3.write(f"**Columnas clave:** {', '.join(df.columns[:5])}...")
-
-#         # Mostramos las primeras 5 filas para que se vea el contenido
-#         st.dataframe(df.head(5), use_container_width=True)
-
-
-# # --- ESTO DEBE IR AL FINAL DE TODO, FUERA DE LOS BUCLES ---
-# st.write("")  # Un espacio en blanco
-
-# st.divider()
-
-
-# Creamos columnas para que quede alineado
 col_c1, col_c2 = st.columns([3, 1])
 
 with col_c1:
