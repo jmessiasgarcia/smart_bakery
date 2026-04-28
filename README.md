@@ -1,42 +1,39 @@
-# 🥐 SmartBakery: Business Intelligence & Predictive Analytics
+# 🥐 Smart Bakery | Strategic BI & Decision Support
 
-This project delivers a comprehensive data analysis solution for an artisanal bakery looking to optimize production and better understand customer behavior. It combines the power of **Power BI** for visualization, **DAX** for business metrics, and **Python** for advanced analytical insights.
+> **Decision & Optimization Systems** • **Operations Research** • **Strategic Analytics**
 
-## 📋 Project Overview
-"SmartBakery" faced challenges in inventory management and a lack of visibility during peak sales hours. This repository contains a data ecosystem that transforms raw sales tickets into strategic business decisions.
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
+![Scikit-Learn](https://img.shields.io/badge/Scikit_Learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white)
 
-## 🚀 Technologies Used
-* **Power BI Desktop**: Data modeling and dashboard design.
-* **DAX (Data Analysis Expressions)**: Custom measures for KPIs (Total Revenue, Average Ticket, YoY Growth).
-* **Python**: Data cleaning (Pandas) and correlation analysis between external temperature and pastry sales.
-* **Power Query**: ETL (Extract, Transform, Load) processes for data preparation.
-
-## 📊 Dashboards Included
-
-### 1. Executive Sales Overview
-Analysis of total revenue, profit margins by product type, and staff performance.
-
-### 2. Customer Behavior Analysis
-Study of the most profitable time slots and customer segmentation based on purchase frequency.
-
-### 3. Python Integration (Predictive Insights)
-Utilizing Python scripts within Power BI to identify how weather variables impact the demand for specific baked goods.
-
-## 🛠️ Repository Structure
-* `/dashboards`: `.pbix` files containing the interactive reports.
-* `/data`: Datasets used for the analysis (CSV/Excel).
-* `/scripts`: Python code used for advanced data processing.
-* `/images`: Screenshots and assets for documentation.
-
-## 📈 Key Business Insights
-* **Sales Peak:** 65% of premium pastries are sold before 10:30 AM.
-* **Weather Correlation:** A 20% increase in coffee and hot beverage sales was detected when temperatures drop below 15°C.
-* **Optimization:** Identified a 15% potential reduction in food waste by adjusting afternoon production based on historical trends.
-
-## 🏗️ How to View the Project
-1. Download the `.pbix` file located in the `/dashboards` folder.
-2. Open the file using **Power BI Desktop**.
-3. *Note: To view Python visuals, ensure you have `pandas`, `matplotlib`, and `seaborn` installed in your local environment.*
+An end-to-end **Decision Engineering** platform designed to transform raw commercial operations into a high-profit strategy. This tool bridges the gap between complex data science and executive action.
 
 ---
-**Developed by José Messias Garcia]** [LinkedIn]([Your_LinkedIn_Link)](https://www.linkedin.com/in/jmessiasgarcia/) | [Smart Bakery Solutions](https://smart-bakery.streamlit.app/)
+
+### 🚀 [Launch Live App](https://smart-bakery.streamlit.app)
+
+---
+
+### 🎯 Key Engineering Solutions
+
+#### 1. Predictive Demand Systems
+Implementing **Random Forest** and **XGBoost** architectures to forecast future sales volumes. This enables proactive inventory management and precise revenue projections.
+
+#### 2. Strategic Portfolio Optimization (BCG)
+A dynamic **Growth-Share Matrix** that maps product performance against real contribution margins. It identifies "Stars" to scale and "Dogs" to optimize or eliminate.
+
+#### 3. Client Intelligence & Retention
+* **Pareto Analysis (80/20):** Algorithmic identification of high-yield customer segments.
+* **Churn Mitigation:** Data-driven tracking of customer loyalty to prevent revenue leakage.
+
+#### 4. Financial Normalization (ETL)
+Robust data pipelines designed to clean, normalize, and reconcile disparate historical records into a single source of truth for financial KPIs.
+
+### 🛠 Tech Stack
+* **Analysis:** Pandas, NumPy, Scipy.
+* **ML Models:** Scikit-learn, XGBoost (Time-series & Regression).
+* **Visualization:** Plotly (Dynamic Strategic Matrices).
+* **Deployment:** Streamlit Cloud.
+
+---
+*Developed by José Messias Garcia*
